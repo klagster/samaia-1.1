@@ -8,7 +8,7 @@ from google.adk.runners import Runner
 from google.adk.sessions import InMemorySessionService
 
 # Import the configured agent and the message builder helper
-from app.agents import client_profile_agent, build_client_profile_message
+from src.app.agents import client_profile_agent, build_client_profile_message
 
 APP_NAME = "client_profile_app"
 USER_ID = "user_123"
@@ -19,9 +19,19 @@ async def main() -> None:
     # Load .env so VERTEX_* env vars are available to ADK/google-genai
     load_dotenv()
 
+    # --- Normalize Vertex env so google-genai picks it up ---
+    # Prefer Vertex AI over Gemini API
+    os.environ.setdefault("GOOGLE_GENAI_USE_VERTEXAI", "TRUE")
+
+    # Map our local VERTEX_* names to the google-genai expected names
+    if os.getenv("VERTEX_PROJECT") and not os.getenv("GOOGLE_CLOUD_PROJECT"):
+        os.environ["GOOGLE_CLOUD_PROJECT"] = os.environ["VERTEX_PROJECT"]
+    if os.getenv("VERTEX_LOCATION") and not os.getenv("GOOGLE_CLOUD_LOCATION"):
+        os.environ["GOOGLE_CLOUD_LOCATION"] = os.environ["VERTEX_LOCATION"]
+
     # Optional: sanity check Vertex config so failures are obvious
-    project = os.getenv("VERTEX_PROJECT") or os.getenv("GOOGLE_CLOUD_PROJECT")
-    location = os.getenv("VERTEX_LOCATION", "us-central1")
+    project = os.getenv("GOOGLE_CLOUD_PROJECT") or os.getenv("VERTEX_PROJECT")
+    location = os.getenv("GOOGLE_CLOUD_LOCATION") or os.getenv("VERTEX_LOCATION") or "us-central1"
     if not project:
         print(
             "WARNING: VERTEX_PROJECT or GOOGLE_CLOUD_PROJECT not set. "
@@ -30,6 +40,7 @@ async def main() -> None:
         )
     else:
         print(f"[Vertex] project={project} location={location}")
+        print(f"[Vertex] GOOGLE_GENAI_USE_VERTEXAI={os.getenv('GOOGLE_GENAI_USE_VERTEXAI')}")
 
     # Session + Runner
     session_service = InMemorySessionService()
