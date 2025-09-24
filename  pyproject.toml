@@ -1,0 +1,20 @@
+samaia-1.1/
+  pyproject.toml            # or requirements.txt + constraints.txt
+  .env                      # runtime env (not committed)
+  .gitignore
+  src/
+    app/
+      __init__.py
+      agents.py             # ADK LlmAgent/SequentialAgent definitions
+      tools.py              # any custom Tool subclasses
+      api.py                # FastAPI (REST) entrypoint
+      cli.py                # click/typer CLI that calls agents
+    adapters/
+      vertex_models.py      # Vertex model wrappers (if needed)
+      artifacts.py          # GCS artifact service config
+  tests/
+    test_smoke.py           # quick “agent runs” test
+  examples/
+    00_quickstart.ipynb     # notebook using your agents
+  docs/
+    adr/0001-decisions.md   # architecture decisions

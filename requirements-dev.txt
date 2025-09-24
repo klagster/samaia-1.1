@@ -1,0 +1,8 @@
+# Development dependencies
+black
+ruff
+mypy
+pytest
+pytest-asyncio
+ipython
+pre-commit

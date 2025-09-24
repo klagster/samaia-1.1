@@ -1,2 +1,17 @@
-google-adk 
-python-dotenv
+google-adk @ git+https://github.com/google/adk-python.git@main
+google-cloud-aiplatform>=1.66.0
+google-auth>=2.35.0
+google-auth-oauthlib>=1.2.0
+python-dotenv>=1.0.1
+pydantic>=2.9.2
+
+# REST API
+fastapi>=0.115.0
+uvicorn>=0.30.0
+
+# Testing
+pytest>=8.4.0
+httpx>=0.27.0
+
+# Notebooks
+jupyter>=1.1.1
