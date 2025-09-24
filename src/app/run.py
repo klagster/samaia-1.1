@@ -8,7 +8,7 @@ from google.adk.runners import Runner
 from google.adk.sessions import InMemorySessionService
 
 # Import the configured agent and the message builder helper
-from .agents import client_profile_agent, build_client_profile_message
+from app.agents import client_profile_agent, build_client_profile_message
 
 APP_NAME = "client_profile_app"
 USER_ID = "user_123"
