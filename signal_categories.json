@@ -1,0 +1,34 @@
+
+
+[
+  {
+    "name": "Security Consolidation & Simplification Intent",
+    "description": "Signals indicating a company's desire to reduce security tool sprawl, unify platforms, and streamline management for operational efficiency and consistent policy enforcement.",
+    "signal_type": "behavioral, declared, firmographic"
+  },
+  {
+    "name": "Advanced Browser Security & Attack Surface Reduction Intent",
+    "description": "Signals pointing to an organization's concern about browser-specific vulnerabilities, the need for stronger browser-level controls, and proactive measures against browser-borne threats.",
+    "signal_type": "behavioral, declared, technographic"
+  },
+  {
+    "name": "Hybrid Workforce & Remote Access Security Modernization Intent",
+    "description": "Signals reflecting challenges in securing diverse browser environments and corporate resources for a distributed or hybrid workforce, emphasizing productivity and secure access.",
+    "signal_type": "behavioral, declared, firmographic"
+  },
+  {
+    "name": "Data Protection & Compliance Enhancement Intent",
+    "description": "Signals related to efforts to prevent data exfiltration, enforce data loss prevention (DLP) policies, and ensure regulatory compliance, particularly concerning data accessed via browsers.",
+    "signal_type": "behavioral, declared, firmographic"
+  },
+  {
+    "name": "Threat Adaptation & Comprehensive Visibility Intent",
+    "description": "Signals indicating a struggle to keep pace with evolving cyber threats, a lack of holistic security visibility, and the need for more adaptive and integrated security strategies.",
+    "signal_type": "behavioral, declared"
+  },
+  {
+    "name": "SaaS & Cloud Application Security Intent",
+    "description": "Signals demonstrating a need for robust security measures specifically for SaaS applications and internet access, driven by widespread adoption and associated risks.",
+    "signal_type": "behavioral, declared, technographic"
+  }
+]

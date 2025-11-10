@@ -1,0 +1,31 @@
+{
+  "client_identity": {
+    "name": "Palo Alto Networks",
+    "url": "https://www.paloaltonetworks.com/",
+    "tagline": "CYBERSECURITY PARTNER OF CHOICE",
+    "one_liner": "The world's cybersecurity leader, innovating to outpace cyberthreats and provide next-gen cybersecurity platforms and services to thousands of customers globally."
+  },
+  "positioning_and_value_prop": {
+    "category": "Secure Enterprise Browsers",
+    "positioning_statement": "Palo Alto Networks Prisma Access Browser is the industry's only SASE solution with a natively integrated secure browser, creating a secure workspace on both managed and unmanaged devices, providing consistent, frictionless Zero Trust access to SaaS and private applications on any device, anywhere.",
+    "value_prop_headline": "Secure Browsers: How to protect your organization with consistent security for any user, device, location, and app",
+    "key_benefits": [
+      "Reducing risk, reducing costs, and increasing productivity",
+      "Consistent security for any user, device, location, and app",
+      "Comprehensive visibility into and control over web applications and user actions",
+      "Frictionless Zero Trust access to SaaS and private applications on any device",
+      "Enhanced security for both managed and unmanaged devices",
+      "Reduced reliance on VDI infrastructure and lower operational costs"
+    ],
+    "differentiators": [
+      "Industry's only SASE solution with a natively integrated secure browser",
+      "Advanced AI-powered security capabilities to protect against sophisticated phishing attacks and advanced malware",
+      "Leverages cloud-delivered security services, browser-based data protection, and embedded advanced security features",
+      "Unmatched decryption with Palo Alto Networks Security Solutions (NGFW and SASE) and complements decryption with secure visibility for undecrypted traffic",
+      "Powered by Palo Alto Networks Precision AI™ and Advanced WildFire® for malware and URL prevention"
+    ]
+  },
+  "icps_and_pains": {
+    "icps": [
+      {
+        "name": "

@@ -1,0 +1,260 @@
+{
+  "company": "Palo Alto Networks",
+  "generated_at": "2024-05-15T12:00:00Z",
+  "time_window": "last 12\u201318 months",
+  "problems": [
+    {
+      "title": "Uncontrolled Browser as a Major Attack Vector",
+      "category": "Risk",
+      "why_it_matters": "The web browser has become the primary workspace and a favored attack vector, leading to a significant number of security incidents, data breaches, and system compromises.",
+      "stakeholder": "CISO",
+      "evidence": [
+        {
+          "source": "Definitive Guide to Secure Browsers",
+          "url_or_id": "p. 7",
+          "date": "Unknown",
+          "quote_or_note": "Browsers expose an expansive attack surface. They are positioned in the last mile, where workers interact with data, and users rely on them to do most of their work. This situation makes consumer web browsers a favored attack vector."
+        },
+        {
+          "source": "Definitive Guide to Secure Browsers",
+          "url_or_id": "p. 20",
+          "date": "Unknown",
+          "quote_or_note": "According to Omdia's \u201cThe State of Security in the Modern Organization,\" 95% of organizations reported a security incident originating in the browser."
+        },
+        {
+          "source": "Prisma Access Browser: An Integral Part of SASE",
+          "url_or_id": "p. 2",
+          "date": "Unknown",
+          "quote_or_note": "Palo Alto Networks recent research reveals that employees spend over 85% of their workday in web browsers. The browser has a central role in everyone's day to day. However, this also makes the browser a prime target for cyberattacks, with nearly 95% of surveyed organizations reporting browser-based threats across all devices."
+        },
+        {
+          "source": "Innovation Insight: Secure Enterprise Browsers",
+          "url_or_id": "p. 1",
+          "date": "1 April 2025",
+          "quote_or_note": "Threat actors frequently target employees with phishing attacks to steal credentials and bypass endpoint detection and response controls, necessitating an additional layer of visibility and control within the web browser."
+        }
+      ],
+      "affected_kpis": [
+        "Number of security incidents",
+        "Mean Time To Detect (MTTD)",
+        "Mean Time To Respond (MTTR)",
+        "Data Loss Incidents",
+        "Ransomware incidents"
+      ],
+      "competitive_context": "Competitors like Zscaler also address browser security, but Palo Alto Networks emphasizes a SASE-native secure browser for comprehensive protection.",
+      "urgency": "High",
+      "confidence": 1.0,
+      "validation_questions": [
+        "How are you currently securing the browser, which is identified as the primary attack vector for 95% of security incidents?"
+      ],
+      "value_prop_mapping": "Directly reduces risk by securing the primary attack vector (browser) and improves SecOps efficiency by providing better detection and response capabilities for browser-originated threats."
+    },
+    {
+      "title": "Inadequate Security for Hybrid Workforce & Unmanaged Devices",
+      "category": "Risk",
+      "why_it_matters": "The rise of hybrid work and BYOD policies means a significant portion of successful attacks and data leakage originate from unmanaged or poorly managed devices, increasing compliance risks and operational burden.",
+      "stakeholder": "CISO",
+      "evidence": [
+        {
+          "source": "Definitive Guide to Secure Browsers",
+          "url_or_id": "p. 12",
+          "date": "Unknown",
+          "quote_or_note": "According to the \u201cMicrosoft Digital Defense Report 2023,\" 80-90% of all successful ransomware compromises originate through unmanaged devices."
+        },
+        {
+          "source": "Definitive Guide to Secure Browsers",
+          "url_or_id": "p. 15",
+          "date": "Unknown",
+          "quote_or_note": "68% of organizations that experienced accidental data leakage reported that these incidents ONLY occurred on poorly managed and unmanaged devices."
+        },
+        {
+          "source": "Definitive Guide to Secure Browsers",
+          "url_or_id": "p. 15",
+          "date": "Unknown",
+          "quote_or_note": "89% of attacks were launched from unmanaged and poorly managed devices compared to 12% on managed devices."
+        },
+        {
+          "source": "Definitive Guide to Secure Browsers",
+          "url_or_id": "p. 32",
+          "date": "Unknown",
+          "quote_or_note": "According to Omdia's \"The State of Security in the Modern Organization,\" approximately 90% of organizations that had employees and contractors access corporate apps from personal devices. The prevalent use of personal devices is a serious challenge for security teams."
+        },
+        {
+          "source": "Innovation Insight: Secure Enterprise Browsers",
+          "url_or_id": "p. 1",
+          "date": "1 April 2025",
+          "quote_or_note": "SEBs enable segmented access from unmanaged or lightly managed end-user devices and bring-your-own PC (BYOPC), where deploying endpoint agents would be inappropriate due to privacy or maintenance reasons."
+        }
+      ],
+      "affected_kpis": [
+        "Data leakage incidents",
+        "Compliance audit findings",
+        "Cost of managing BYOD security",
+        "Number of security incidents from unmanaged devices"
+      ],
+      "competitive_context": "Competitors like Zscaler (ZIA) also offer secure access for hybrid work, but Palo Alto Networks emphasizes a SASE-native secure browser for consistent protection across all devices.",
+      "urgency": "High",
+      "confidence": 1.0,
+      "validation_questions": [
+        "With the prevalence of BYOD and contractor access, how confident are you in your ability to prevent data leakage and attacks originating from unmanaged devices?"
+      ],
+      "value_prop_mapping": "Reduces risk by extending security controls to unmanaged devices and improves compliance posture."
+    },
+    {
+      "title": "Operational Inefficiencies and Poor User Experience from Legacy Security Approaches",
+      "category": "Operations",
+      "why_it_matters": "Traditional security solutions like VDI, VPN, and RBI introduce significant latency, high operational costs, and administrative overhead, negatively impacting user productivity and satisfaction.",
+      "stakeholder": "CIO",
+      "evidence": [
+        {
+          "source": "Definitive Guide to Secure Browsers",
+          "url_or_id": "p. 18",
+          "date": "Unknown",
+          "quote_or_note": "VDI solutions' limitations also include scaling difficulties and high costs. Bandwidth constraints and latency issues can negatively impact the user experience."
+        },
+        {
+          "source": "Definitive Guide to Secure Browsers",
+          "url_or_id": "p. 18",
+          "date": "Unknown",
+          "quote_or_note": "With a legacy VPN solution, all traffic destined for the cloud is backhauled to the corporate data center. This approach can introduce latency, degrade application performance, and impair the user experience."
+        },
+        {
+          "source": "Definitive Guide to Secure Browsers",
+          "url_or_id": "p. 19",
+          "date": "Unknown",
+          "quote_or_note": "RBI solutions... causes latency, user experience issues (e.g., poor rendering), high bandwidth consumption, and drives up costs."
+        },
+        {
+          "source": "Innovation Insight: Secure Enterprise Browsers",
+          "url_or_id": "p. 1",
+          "date": "1 April 2025",
+          "quote_or_note": "Network security solutions often result in increased latency due to the need to steer traffic to the cloud and perform decryption..."
+        },
+        {
+          "source": "Innovation Insight: Secure Enterprise Browsers",
+          "url_or_id": "p. 2",
+          "date": "1 April 2025",
+          "quote_or_note": "The proliferation of devices and application access methods... has resulted in poor DEX for employees, contractors and third parties..."
+        },
+        {
+          "source": "Prisma Access Browser: An Integral Part of SASE",
+          "url_or_id": "p. 9",
+          "date": "Unknown",
+          "quote_or_note": "VDI solutions can be complex and expensive to maintain... Reducing VDI deployments not only lowers operational costs but also enhances the user experience by delivering faster and more reliable access to applications."
+        }
+      ],
+      "affected_kpis": [
+        "IT operational costs",
+        "User productivity",
+        "Application performance (latency)",
+        "Help desk tickets",
+        "Employee satisfaction (NPS)"
+      ],
+      "competitive_context": "Many vendors offer SASE solutions to replace legacy infrastructure, but Palo Alto Networks positions its secure browser as a direct alternative to VDI/VPN/RBI for specific use cases.",
+      "urgency": "Medium",
+      "confidence": 1.0,
+      "validation_questions": [
+        "Are your current VDI, VPN, or RBI solutions creating bottlenecks or user experience issues that impact productivity and drive up IT costs?"
+      ],
+      "value_prop_mapping": "Improves SecOps efficiency by reducing administrative overhead and complexity of legacy systems, and enhances customer experience (internal users) by eliminating latency and improving productivity."
+    },
+    {
+      "title": "Lack of Granular Visibility and Control over Web/SaaS Application Usage",
+      "category": "Risk",
+      "why_it_matters": "Limited visibility into browser activities and SaaS application usage leads to shadow IT, data exfiltration risks, and makes threat detection and compliance difficult, particularly with advanced phishing and malware.",
+      "stakeholder": "VP Security Ops",
+      "evidence": [
+        {
+          "source": "Definitive Guide to Secure Browsers",
+          "url_or_id": "p. 14",
+          "date": "Unknown",
+          "quote_or_note": "Most organizations have little visibility into or control over their users' browser activities. Users can visit unsafe websites and succumb to malware, phishing attacks, and other threats without their employer's knowledge."
+        },
+        {
+          "source": "Definitive Guide to Secure Browsers",
+          "url_or_id": "p. 15",
+          "date": "Unknown",
+          "quote_or_note": "This lack of visibility increases the browser's potential to act as an entry point for malware or allow leaks of sensitive data."
+        },
+        {
+          "source": "Definitive Guide to Secure Browsers",
+          "url_or_id": "p. 23",
+          "date": "Unknown",
+          "quote_or_note": "Standard enterprise browsers... may not be adequate in securing the browser-based workspace against the most advanced phishing attacks and malware... Because they do not leverage threat intelligence from a vast pool of data, it is difficult for them to detect new and unique cyber threats."
+        },
+        {
+          "source": "Prisma Access Browser: An Integral Part of SASE",
+          "url_or_id": "p. 3",
+          "date": "Unknown",
+          "quote_or_note": "Without full visibility and control over user interactions within web and cloud applications, organizations face increased risks of data exposure and compliance issues."
+        },
+        {
+          "source": "Prisma Access Browser: An Integral Part of SASE",
+          "url_or_id": "p. 12",
+          "date": "Unknown",
+          "quote_or_note": "Shadow IT, where employees use unapproved applications and devices, poses significant security risks. Prisma Access Browser provides visibility into all web-based activities, allowing organizations to monitor and manage shadow IT effectively."
+        }
+      ],
+      "affected_kpis": [
+        "Shadow IT incidents",
+        "Data exfiltration attempts",
+        "Compliance violations",
+        "Security audit findings",
+        "Incident response time"
+      ],
+      "competitive_context": "Competitors like Zscaler offer SWG capabilities, but Palo Alto Networks emphasizes its SASE-native secure browser for deep, granular visibility and control directly at the browser level.",
+      "urgency": "High",
+      "confidence": 1.0,
+      "validation_questions": [
+        "How are you currently gaining granular visibility and control over user activities within SaaS and web applications, especially concerning shadow IT and potential data exfiltration?"
+      ],
+      "value_prop_mapping": "Reduces risk by providing deep visibility and control, improves SecOps efficiency through better threat detection and forensics, and aids compliance."
+    },
+    {
+      "title": "Securing the Use of Generative AI Tools and Preventing Data Leakage",
+      "category": "Risk",
+      "why_it_matters": "The rapid adoption of Generative AI tools introduces new security risks, including sensitive data leakage, intellectual property exposure, and shadow AI, hindering safe innovation and compliance.",
+      "stakeholder": "CISO",
+      "evidence": [
+        {
+          "source": "Definitive Guide to Secure Browsers",
+          "url_or_id": "p. 30",
+          "date": "Unknown",
+          "quote_or_note": "Provide IT and security teams with deep visibility and tight control over all GenAI SaaS and web applications, including ChatGPT, enabling secure use of GenAI tools across the organization."
+        },
+        {
+          "source": "Prisma Access Browser: An Integral Part of SASE",
+          "url_or_id": "p. 9",
+          "date": "Unknown",
+          "quote_or_note": "Generative AI tools are transforming business operations, but they also introduce potential security risks. Prisma Access Browser reduces risk by providing a secure environment for using web-based GenAI tools. With the browser's last-mile DLP controls, data interactions with AI platforms within the browser are protected."
+        },
+        {
+          "source": "Prisma Access Browser: An Integral Part of SASE",
+          "url_or_id": "p. 9",
+          "date": "Unknown",
+          "quote_or_note": "Workers can unintentionally upload sensitive corporate data to GenAI apps, making data protection critical. Prisma Access Browser applies last-mile data protections to block copy-paste, disable file uploads, and prevent typing sensitive information into the app."
+        },
+        {
+          "source": "Prisma Access Browser: An Integral Part of SASE",
+          "url_or_id": "p. 9",
+          "date": "Unknown",
+          "quote_or_note": "One of the biggest challenges with using GenAI tools is gaining visibility into shadow AI and maintaining user access controls."
+        }
+      ],
+      "affected_kpis": [
+        "Data leakage incidents (specifically to AI models)",
+        "Intellectual property loss",
+        "Compliance violations",
+        "Shadow AI usage",
+        "AI adoption rate (if security is a blocker)"
+      ],
+      "competitive_context": "This is an emerging area, and vendors are racing to provide solutions. Palo Alto Networks positions its secure browser with AI Access Security as a comprehensive solution.",
+      "urgency": "High",
+      "confidence": 1.0,
+      "validation_questions": [
+        "How are you currently managing the security risks associated with employees using Generative AI tools, particularly concerning sensitive data leakage and shadow AI?"
+      ],
+      "value_prop_mapping": "Reduces risk of data leakage and IP loss when using AI, enabling safe adoption of new technologies (growth) and improving compliance."
+    }
+  ]
+}

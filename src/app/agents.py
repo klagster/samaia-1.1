@@ -1,38 +1,70 @@
-from typing import Any, Dict
+# src/app/agents.py
+from __future__ import annotations
 from google.adk.agents import LlmAgent
-from google.genai import types as gt
-from .schemas import ClientProfileOutput
+from google.adk.models.google_llm import GoogleLLM
+from google.adk.types import Content, TextPart, Role
 
-# System instructions keep it focused and JSON-only
-SYSTEM_PROMPT = (
-    "You are an analyst. Given a company name and website, return ONLY a JSON object "
-    "that matches the provided Pydantic schema. Be concise, factual, and avoid fluff."
+from .schemas import ClientProfileOutput, build_prompt_payload
+
+
+# Single-model config (Vertex/Gemini; environment is handled in run.py)
+MODEL = GoogleLLM(
+    model="gemini-1.5-pro",  # change if you want
+    temperature=0.2,
 )
 
-# Exported agent used by Runner in run.py
+# System instruction: we’ll let the Prompt Schema carry most of the structure,
+# but reiterate “return ONLY JSON confirming to output schema”
+SYSTEM_TXT = (
+    "You are a Client Profiling Agent. You will receive a JSON object that strictly "
+    "follows the 'Client Prompt Schema (Gemini)'. Use ONLY the provided inputs and "
+    "attachments as ground truth. Your task is to produce a JSON object that conforms "
+    "to the required output schema (ClientProfileOutput). Return ONLY valid JSON—no prose."
+)
+
 client_profile_agent = LlmAgent(
     name="client_profile_agent",
-    model="gemini-2.0-flash",        # uses Vertex via ADC
-    description="Builds a short company profile with typed JSON output.",
-    instruction=SYSTEM_PROMPT,
-    output_schema=ClientProfileOutput,   # ADK will validate/shape output
+    description="Builds a structured client profile using the given prompt schema and attachments.",
+    model=MODEL,
+    instruction=SYSTEM_TXT,
+    # CRITICAL: enforce the final structure
+    output_schema=ClientProfileOutput,
+    # Remove transfer to avoid the warning
+    disallow_transfer_to_parent=True,
+    disallow_transfer_to_peers=True,
 )
 
-# Helper to build a user message for the Runner; no direct agent.run calls here
-# (Runner is responsible for execution and streaming.)
 
-def build_client_profile_message(payload: Dict[str, Any]) -> gt.Content:
-    """Create a single user message from a simple payload.
-
-    Expected payload keys: {"company": str, "website": str}
+def build_client_profile_message(payload: dict) -> Content:
     """
-    company = str(payload.get("company", "")).strip()
-    website = str(payload.get("website", "")).strip()
+    Turn an easy payload into the full Prompt Schema JSON the model consumes.
+    payload expects keys: company, website, doc_urls? (optional)
+    Optionally: assets as arrays of {fileName,url,filePath}
+    """
+    company = payload.get("company") or "Unknown"
+    website = payload.get("website") or "https://example.com"
 
-    prompt = (
-        f"Company: {company}\n"
-        f"Website: {website}\n"
-        "Return ONLY valid JSON for the schema `ClientProfileOutput`."
+    # If user passes doc_urls (simple strings), map them into publicAssets items
+    doc_urls = payload.get("doc_urls") or []
+    public_assets = [
+        {"fileName": url.split("/")[-1] or "doc", "url": url, "filePath": url}
+        for url in doc_urls
+    ]
+
+    # Pass through richer assets if provided
+    public_assets = payload.get("public_assets") or public_assets
+    internal_assets = payload.get("internal_assets") or []
+
+    prompt = build_prompt_payload(
+        company_name=company,
+        company_url=website,
+        public_assets=public_assets,
+        internal_assets=internal_assets,
+        metadata=payload.get("metadata"),
     )
 
-    return gt.Content(role="user", parts=[gt.Part(text=prompt)])
+    # ADK Content object with the entire prompt schema as the user message
+    return Content(
+        role=Role.USER,
+        parts=[TextPart(text=prompt.model_dump_json())],
+    )

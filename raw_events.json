@@ -1,0 +1,34 @@
+[
+  {
+    "timestamp": "2025-09-01T12:00:00Z",
+    "company": "Bank of America",
+    "source": "Bombora",
+    "signals": [
+      "SASE",
+      "browser isolation",
+      "data exfiltration prevention"
+    ],
+    "note": "High intent activity around unified security and browser threats"
+  },
+  {
+    "timestamp": "2025-09-10T15:30:00Z",
+    "company": "Bank of America",
+    "source": "G2",
+    "signals": [
+      "Enterprise Browser",
+      "DLP",
+      "remote access security"
+    ],
+    "note": "Review activity and comparisons with Zscaler and Cisco"
+  },
+  {
+    "timestamp": "2025-09-18T09:45:00Z",
+    "company": "Bank of America",
+    "source": "Job Postings",
+    "signals": [
+      "SASE architect",
+      "cloud security engineer"
+    ],
+    "note": "Hiring suggests new security architecture initiatives"
+  }
+]

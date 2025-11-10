@@ -1,0 +1,10 @@
+{
+  "company_name": "Bank of America",
+  "company_url": "https://www.bankofamerica.com",
+  "personas": ["CEO", "CFO", "CIO", "Chief Risk Officer"],
+  "competitors": ["JPMorgan Chase", "Wells Fargo", "Citigroup"],
+  "your_value_prop": "We deliver timely, executive-ready insights that reduce time-to-signal and improve decision-making for financial institutions navigating complex global markets.",
+  "time_window": "last 90 days",
+  "industry_segment": "Financial Services / Banking",
+  "geo": "Global (focus: North America)"
+}

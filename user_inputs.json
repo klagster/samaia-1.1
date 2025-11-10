@@ -1,0 +1,10 @@
+{
+  "company_name": "Revolut",
+  "company_url": "https://www.revolut.com",
+  "personas": ["CEO", "CFO", "CIO", "Chief Risk Officer"],
+  "competitors": ["Wise", "N26", "KOHO", "Monzo", "Atom"],
+  "your_value_prop": "We deliver the industry's first cloud-delivered enterprise browser that protects all users and all apps, anywhere",
+  "time_window": "last 90 days",
+  "industry_segment": "Financial Services / Banking",
+  "geo": "Europe (focus: United Kingdom)"
+}
