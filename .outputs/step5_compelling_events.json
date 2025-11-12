@@ -1,12 +1,12 @@
 {
-  "company": "Equinix",
-  "generated_at": "2025-11-06T23:19:39+00:00",
+  "company": "Elite Home Care",
+  "generated_at": "2025-11-10T19:09:24+00:00",
   "compelling_events": [
     {
-      "issue_title": "Evidenced CX Issue",
+      "issue_title": "Aggressive Expansion Risks a Fragmented Operating Posture",
       "aligned_challenges": [],
-      "event_message": "Evidenced CX Issue is a priority; resolving it creates measurable business benefit this cycle.",
-      "stakeholder": "VP, Customer Experience",
+      "event_message": "Aggressive Expansion Risks a Fragmented Operating Posture is a priority; resolving it creates measurable business benefit this cycle.",
+      "stakeholder": "VP, Operations",
       "urgency_trigger": "Active initiative signaled; timing window likely this planning cycle.",
       "risk_if_ignored": "Drift, rework, and value leakage.",
       "opportunity_if_addressed": "Crisper execution and measurable outcomes tied to KPIs.",
@@ -14,81 +14,21 @@
       "sources": [
         {
           "name": "vertex_search",
-          "url": "https://www.sec.gov/edgar/browse/?CIK=0001104194",
+          "url": "https://www.sec.gov/edgar/browse/?CIK=1874035",
           "date": "",
-          "quote_or_note": "Equinix, Inc. - SEC.gov"
+          "quote_or_note": "Elite Home Care, Inc. - SEC.gov"
         },
         {
           "name": "vertex_search",
-          "url": "https://www.sec.gov/Archives/edgar/data/1104194/000110465924049409/0001104659-24-049409-index.htm",
+          "url": "https://www.wfmz.com/news/pr_newswire/pr_newswire_pennsylvania/elite-home-care-expands-services-to-meet-growing-demand/article_f3922949-d29a-539f-869c-f99e81144963.html",
           "date": "",
-          "quote_or_note": "Equinix, Inc. - SEC.gov"
+          "quote_or_note": "Elite Home Care Expands Services to Meet Growing Demand"
         },
         {
           "name": "vertex_search",
-          "url": "https://www.sec.gov/Archives/edgar/data/1104194/000110465924064104/0001104659-24-064104-index.htm",
+          "url": "https://www.einnews.com/pr_news/694221084/elite-home-care-announces-new-leadership",
           "date": "",
-          "quote_or_note": "Equinix, Inc. - SEC.gov"
-        }
-      ]
-    },
-    {
-      "issue_title": "Evidenced Growth Issue",
-      "aligned_challenges": [],
-      "event_message": "Evidenced Growth Issue is constraining scale velocity. Streamlining architecture unlocks faster market entry and higher win rates.",
-      "stakeholder": "CRO / GM",
-      "urgency_trigger": "Active initiative signaled; timing window likely this planning cycle.",
-      "risk_if_ignored": "Integration delays, missed revenue windows, and competitive displacement.",
-      "opportunity_if_addressed": "Accelerated time-to-market via standard patterns and automation across regions.",
-      "confidence": 0.56,
-      "sources": [
-        {
-          "name": "vertex_search",
-          "url": "https://www.sec.gov/edgar/browse/?CIK=0001104194",
-          "date": "",
-          "quote_or_note": "Equinix, Inc. - SEC.gov"
-        },
-        {
-          "name": "vertex_search",
-          "url": "https://www.sec.gov/Archives/edgar/data/1104194/000110465924049409/0001104659-24-049409-index.htm",
-          "date": "",
-          "quote_or_note": "Equinix, Inc. - SEC.gov"
-        },
-        {
-          "name": "vertex_search",
-          "url": "https://www.sec.gov/Archives/edgar/data/1104194/000110465924064104/0001104659-24-064104-index.htm",
-          "date": "",
-          "quote_or_note": "Equinix, Inc. - SEC.gov"
-        }
-      ]
-    },
-    {
-      "issue_title": "Capital Structure Changes Create Pressure for Efficient Growth",
-      "aligned_challenges": [],
-      "event_message": "Capital Structure Changes Create Pressure for Efficient Growth is constraining scale velocity. Streamlining architecture unlocks faster market entry and higher win rates.",
-      "stakeholder": "CRO / GM",
-      "urgency_trigger": "Active initiative signaled; timing window likely this planning cycle.",
-      "risk_if_ignored": "Integration delays, missed revenue windows, and competitive displacement.",
-      "opportunity_if_addressed": "Accelerated time-to-market via standard patterns and automation across regions.",
-      "confidence": 0.56,
-      "sources": [
-        {
-          "name": "vertex_search",
-          "url": "https://www.sec.gov/edgar/browse/?CIK=0001104194",
-          "date": "",
-          "quote_or_note": "Equinix, Inc. - SEC.gov"
-        },
-        {
-          "name": "vertex_search",
-          "url": "https://www.sec.gov/Archives/edgar/data/1104194/000110465924049409/0001104659-24-049409-index.htm",
-          "date": "",
-          "quote_or_note": "Equinix, Inc. - SEC.gov"
-        },
-        {
-          "name": "vertex_search",
-          "url": "https://www.sec.gov/Archives/edgar/data/1104194/000110465924064104/0001104659-24-064104-index.htm",
-          "date": "",
-          "quote_or_note": "Equinix, Inc. - SEC.gov"
+          "quote_or_note": "Elite Home Care Announces New Leadership"
         }
       ]
     },
@@ -104,21 +44,51 @@
       "sources": [
         {
           "name": "vertex_search",
-          "url": "https://www.sec.gov/edgar/browse/?CIK=0001104194",
+          "url": "https://www.sec.gov/edgar/browse/?CIK=1874035",
           "date": "",
-          "quote_or_note": "Equinix, Inc. - SEC.gov"
+          "quote_or_note": "Elite Home Care, Inc. - SEC.gov"
         },
         {
           "name": "vertex_search",
-          "url": "https://www.sec.gov/Archives/edgar/data/1104194/000110465924049409/0001104659-24-049409-index.htm",
+          "url": "https://www.wfmz.com/news/pr_newswire/pr_newswire_pennsylvania/elite-home-care-expands-services-to-meet-growing-demand/article_f3922949-d29a-539f-869c-f99e81144963.html",
           "date": "",
-          "quote_or_note": "Equinix, Inc. - SEC.gov"
+          "quote_or_note": "Elite Home Care Expands Services to Meet Growing Demand"
         },
         {
           "name": "vertex_search",
-          "url": "https://www.sec.gov/Archives/edgar/data/1104194/000110465924064104/0001104659-24-064104-index.htm",
+          "url": "https://www.einnews.com/pr_news/694221084/elite-home-care-announces-new-leadership",
           "date": "",
-          "quote_or_note": "Equinix, Inc. - SEC.gov"
+          "quote_or_note": "Elite Home Care Announces New Leadership"
+        }
+      ]
+    },
+    {
+      "issue_title": "Aggressive Expansion Risks a Fragmented Operating Posture",
+      "aligned_challenges": [],
+      "event_message": "Aggressive Expansion Risks a Fragmented Operating Posture is a priority; resolving it creates measurable business benefit this cycle.",
+      "stakeholder": "VP, Customer Experience",
+      "urgency_trigger": "Active initiative signaled; timing window likely this planning cycle.",
+      "risk_if_ignored": "Drift, rework, and value leakage.",
+      "opportunity_if_addressed": "Crisper execution and measurable outcomes tied to KPIs.",
+      "confidence": 0.56,
+      "sources": [
+        {
+          "name": "vertex_search",
+          "url": "https://www.sec.gov/edgar/browse/?CIK=1874035",
+          "date": "",
+          "quote_or_note": "Elite Home Care, Inc. - SEC.gov"
+        },
+        {
+          "name": "vertex_search",
+          "url": "https://www.wfmz.com/news/pr_newswire/pr_newswire_pennsylvania/elite-home-care-expands-services-to-meet-growing-demand/article_f3922949-d29a-539f-869c-f99e81144963.html",
+          "date": "",
+          "quote_or_note": "Elite Home Care Expands Services to Meet Growing Demand"
+        },
+        {
+          "name": "vertex_search",
+          "url": "https://www.einnews.com/pr_news/694221084/elite-home-care-announces-new-leadership",
+          "date": "",
+          "quote_or_note": "Elite Home Care Announces New Leadership"
         }
       ]
     },
@@ -134,28 +104,58 @@
       "sources": [
         {
           "name": "vertex_search",
-          "url": "https://www.sec.gov/edgar/browse/?CIK=0001104194",
+          "url": "https://www.sec.gov/edgar/browse/?CIK=1874035",
           "date": "",
-          "quote_or_note": "Equinix, Inc. - SEC.gov"
+          "quote_or_note": "Elite Home Care, Inc. - SEC.gov"
         },
         {
           "name": "vertex_search",
-          "url": "https://www.sec.gov/Archives/edgar/data/1104194/000110465924049409/0001104659-24-049409-index.htm",
+          "url": "https://www.wfmz.com/news/pr_newswire/pr_newswire_pennsylvania/elite-home-care-expands-services-to-meet-growing-demand/article_f3922949-d29a-539f-869c-f99e81144963.html",
           "date": "",
-          "quote_or_note": "Equinix, Inc. - SEC.gov"
+          "quote_or_note": "Elite Home Care Expands Services to Meet Growing Demand"
         },
         {
           "name": "vertex_search",
-          "url": "https://www.sec.gov/Archives/edgar/data/1104194/000110465924064104/0001104659-24-064104-index.htm",
+          "url": "https://www.einnews.com/pr_news/694221084/elite-home-care-announces-new-leadership",
           "date": "",
-          "quote_or_note": "Equinix, Inc. - SEC.gov"
+          "quote_or_note": "Elite Home Care Announces New Leadership"
         }
       ]
     },
     {
-      "issue_title": "Evidenced Growth Issue",
+      "issue_title": "Aggressive Expansion Risks a Fragmented Operating Posture",
       "aligned_challenges": [],
-      "event_message": "Evidenced Growth Issue is constraining scale velocity. Streamlining architecture unlocks faster market entry and higher win rates.",
+      "event_message": "Aggressive Expansion Risks a Fragmented Operating Posture is a priority; resolving it creates measurable business benefit this cycle.",
+      "stakeholder": "VP, Operations",
+      "urgency_trigger": "Active initiative signaled; timing window likely this planning cycle.",
+      "risk_if_ignored": "Drift, rework, and value leakage.",
+      "opportunity_if_addressed": "Crisper execution and measurable outcomes tied to KPIs.",
+      "confidence": 0.56,
+      "sources": [
+        {
+          "name": "vertex_search",
+          "url": "https://www.sec.gov/edgar/browse/?CIK=1874035",
+          "date": "",
+          "quote_or_note": "Elite Home Care, Inc. - SEC.gov"
+        },
+        {
+          "name": "vertex_search",
+          "url": "https://www.wfmz.com/news/pr_newswire/pr_newswire_pennsylvania/elite-home-care-expands-services-to-meet-growing-demand/article_f3922949-d29a-539f-869c-f99e81144963.html",
+          "date": "",
+          "quote_or_note": "Elite Home Care Expands Services to Meet Growing Demand"
+        },
+        {
+          "name": "vertex_search",
+          "url": "https://www.einnews.com/pr_news/694221084/elite-home-care-announces-new-leadership",
+          "date": "",
+          "quote_or_note": "Elite Home Care Announces New Leadership"
+        }
+      ]
+    },
+    {
+      "issue_title": "Aggressive Expansion Risks a Fragmented Operating Posture",
+      "aligned_challenges": [],
+      "event_message": "Aggressive Expansion Risks a Fragmented Operating Posture is constraining scale velocity. Streamlining architecture unlocks faster market entry and higher win rates.",
       "stakeholder": "CRO / GM",
       "urgency_trigger": "Active initiative signaled; timing window likely this planning cycle.",
       "risk_if_ignored": "Integration delays, missed revenue windows, and competitive displacement.",
@@ -164,51 +164,21 @@
       "sources": [
         {
           "name": "vertex_search",
-          "url": "https://www.sec.gov/edgar/browse/?CIK=0001104194",
+          "url": "https://www.sec.gov/edgar/browse/?CIK=1874035",
           "date": "",
-          "quote_or_note": "Equinix, Inc. - SEC.gov"
+          "quote_or_note": "Elite Home Care, Inc. - SEC.gov"
         },
         {
           "name": "vertex_search",
-          "url": "https://www.sec.gov/Archives/edgar/data/1104194/000110465924049409/0001104659-24-049409-index.htm",
+          "url": "https://www.wfmz.com/news/pr_newswire/pr_newswire_pennsylvania/elite-home-care-expands-services-to-meet-growing-demand/article_f3922949-d29a-539f-869c-f99e81144963.html",
           "date": "",
-          "quote_or_note": "Equinix, Inc. - SEC.gov"
+          "quote_or_note": "Elite Home Care Expands Services to Meet Growing Demand"
         },
         {
           "name": "vertex_search",
-          "url": "https://www.sec.gov/Archives/edgar/data/1104194/000110465924064104/0001104659-24-064104-index.htm",
+          "url": "https://www.einnews.com/pr_news/694221084/elite-home-care-announces-new-leadership",
           "date": "",
-          "quote_or_note": "Equinix, Inc. - SEC.gov"
-        }
-      ]
-    },
-    {
-      "issue_title": "Exposure to Cyber Risk Requires Hardening of Core Controls",
-      "aligned_challenges": [],
-      "event_message": "As Exposure to Cyber Risk Requires Hardening of Core Controls persists, gaps increase the probability of fines, outages, or data loss. Standardizing controls and visibility now reduces audit friction and breach exposure.",
-      "stakeholder": "CISO / Chief Risk Officer",
-      "urgency_trigger": "Active initiative signaled; timing window likely this planning cycle.",
-      "risk_if_ignored": "Escalating likelihood of non-compliance, regulatory penalties, and incident-driven churn.",
-      "opportunity_if_addressed": "A unified control plane that simplifies compliance, shortens audits, and hardens defenses globally.",
-      "confidence": 0.56,
-      "sources": [
-        {
-          "name": "vertex_search",
-          "url": "https://www.sec.gov/edgar/browse/?CIK=0001104194",
-          "date": "",
-          "quote_or_note": "Equinix, Inc. - SEC.gov"
-        },
-        {
-          "name": "vertex_search",
-          "url": "https://www.sec.gov/Archives/edgar/data/1104194/000110465924049409/0001104659-24-049409-index.htm",
-          "date": "",
-          "quote_or_note": "Equinix, Inc. - SEC.gov"
-        },
-        {
-          "name": "vertex_search",
-          "url": "https://www.sec.gov/Archives/edgar/data/1104194/000110465924064104/0001104659-24-064104-index.htm",
-          "date": "",
-          "quote_or_note": "Equinix, Inc. - SEC.gov"
+          "quote_or_note": "Elite Home Care Announces New Leadership"
         }
       ]
     },
@@ -224,58 +194,58 @@
       "sources": [
         {
           "name": "vertex_search",
-          "url": "https://www.sec.gov/edgar/browse/?CIK=0001104194",
+          "url": "https://www.sec.gov/edgar/browse/?CIK=1874035",
           "date": "",
-          "quote_or_note": "Equinix, Inc. - SEC.gov"
+          "quote_or_note": "Elite Home Care, Inc. - SEC.gov"
         },
         {
           "name": "vertex_search",
-          "url": "https://www.sec.gov/Archives/edgar/data/1104194/000110465924049409/0001104659-24-049409-index.htm",
+          "url": "https://www.wfmz.com/news/pr_newswire/pr_newswire_pennsylvania/elite-home-care-expands-services-to-meet-growing-demand/article_f3922949-d29a-539f-869c-f99e81144963.html",
           "date": "",
-          "quote_or_note": "Equinix, Inc. - SEC.gov"
+          "quote_or_note": "Elite Home Care Expands Services to Meet Growing Demand"
         },
         {
           "name": "vertex_search",
-          "url": "https://www.sec.gov/Archives/edgar/data/1104194/000110465924064104/0001104659-24-064104-index.htm",
+          "url": "https://www.einnews.com/pr_news/694221084/elite-home-care-announces-new-leadership",
           "date": "",
-          "quote_or_note": "Equinix, Inc. - SEC.gov"
+          "quote_or_note": "Elite Home Care Announces New Leadership"
         }
       ]
     },
     {
-      "issue_title": "Evidenced Growth Issue",
+      "issue_title": "Evidenced Risk Issue",
       "aligned_challenges": [],
-      "event_message": "Evidenced Growth Issue is constraining scale velocity. Streamlining architecture unlocks faster market entry and higher win rates.",
-      "stakeholder": "CRO / GM",
+      "event_message": "As Evidenced Risk Issue persists, gaps increase the probability of fines, outages, or data loss. Standardizing controls and visibility now reduces audit friction and breach exposure.",
+      "stakeholder": "CISO / Chief Risk Officer",
       "urgency_trigger": "Active initiative signaled; timing window likely this planning cycle.",
-      "risk_if_ignored": "Integration delays, missed revenue windows, and competitive displacement.",
-      "opportunity_if_addressed": "Accelerated time-to-market via standard patterns and automation across regions.",
+      "risk_if_ignored": "Escalating likelihood of non-compliance, regulatory penalties, and incident-driven churn.",
+      "opportunity_if_addressed": "A unified control plane that simplifies compliance, shortens audits, and hardens defenses globally.",
       "confidence": 0.56,
       "sources": [
         {
           "name": "vertex_search",
-          "url": "https://www.sec.gov/edgar/browse/?CIK=0001104194",
+          "url": "https://www.sec.gov/edgar/browse/?CIK=1874035",
           "date": "",
-          "quote_or_note": "Equinix, Inc. - SEC.gov"
+          "quote_or_note": "Elite Home Care, Inc. - SEC.gov"
         },
         {
           "name": "vertex_search",
-          "url": "https://www.sec.gov/Archives/edgar/data/1104194/000110465924049409/0001104659-24-049409-index.htm",
+          "url": "https://www.wfmz.com/news/pr_newswire/pr_newswire_pennsylvania/elite-home-care-expands-services-to-meet-growing-demand/article_f3922949-d29a-539f-869c-f99e81144963.html",
           "date": "",
-          "quote_or_note": "Equinix, Inc. - SEC.gov"
+          "quote_or_note": "Elite Home Care Expands Services to Meet Growing Demand"
         },
         {
           "name": "vertex_search",
-          "url": "https://www.sec.gov/Archives/edgar/data/1104194/000110465924064104/0001104659-24-064104-index.htm",
+          "url": "https://www.einnews.com/pr_news/694221084/elite-home-care-announces-new-leadership",
           "date": "",
-          "quote_or_note": "Equinix, Inc. - SEC.gov"
+          "quote_or_note": "Elite Home Care Announces New Leadership"
         }
       ]
     },
     {
-      "issue_title": "Simplifying Private Cloud Deployments to Improve CX",
+      "issue_title": "Evidenced Operations Issue",
       "aligned_challenges": [],
-      "event_message": "Simplifying Private Cloud Deployments to Improve CX is a priority; resolving it creates measurable business benefit this cycle.",
+      "event_message": "Evidenced Operations Issue is a priority; resolving it creates measurable business benefit this cycle.",
       "stakeholder": "VP, Operations",
       "urgency_trigger": "Active initiative signaled; timing window likely this planning cycle.",
       "risk_if_ignored": "Drift, rework, and value leakage.",
@@ -284,21 +254,21 @@
       "sources": [
         {
           "name": "vertex_search",
-          "url": "https://www.sec.gov/edgar/browse/?CIK=0001104194",
+          "url": "https://www.sec.gov/edgar/browse/?CIK=1874035",
           "date": "",
-          "quote_or_note": "Equinix, Inc. - SEC.gov"
+          "quote_or_note": "Elite Home Care, Inc. - SEC.gov"
         },
         {
           "name": "vertex_search",
-          "url": "https://www.sec.gov/Archives/edgar/data/1104194/000110465924049409/0001104659-24-049409-index.htm",
+          "url": "https://www.wfmz.com/news/pr_newswire/pr_newswire_pennsylvania/elite-home-care-expands-services-to-meet-growing-demand/article_f3922949-d29a-539f-869c-f99e81144963.html",
           "date": "",
-          "quote_or_note": "Equinix, Inc. - SEC.gov"
+          "quote_or_note": "Elite Home Care Expands Services to Meet Growing Demand"
         },
         {
           "name": "vertex_search",
-          "url": "https://www.sec.gov/Archives/edgar/data/1104194/000110465924064104/0001104659-24-064104-index.htm",
+          "url": "https://www.einnews.com/pr_news/694221084/elite-home-care-announces-new-leadership",
           "date": "",
-          "quote_or_note": "Equinix, Inc. - SEC.gov"
+          "quote_or_note": "Elite Home Care Announces New Leadership"
         }
       ]
     }

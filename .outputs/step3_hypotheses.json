@@ -1,170 +1,32 @@
 {
-  "company": "Equinix",
-  "generated_at": "2025-11-06T23:19:39+00:00",
+  "company": "Elite Home Care",
+  "generated_at": "2025-11-10T19:09:24+00:00",
   "time_window": "last 12-18 months",
   "problems": [
     {
-      "title": "Evidenced CX Issue",
-      "category": "CX",
-      "why_it_matters": "Observed signals point to cx pressure around: equinix, participate, upcoming, investor, conferences",
-      "primary_stakeholder": "Unknown",
-      "secondary_stakeholders": [],
-      "evidence": [
-        {
-          "source": "vertex_search",
-          "url_or_id": "https://investors.equinix.com/news-events/press-releases/news-details/2024/Equinix-to-Participate-in-Upcoming-Investor-Conferences/default.aspx",
-          "date": "",
-          "quote_or_note": "Equinix to Participate in Upcoming Investor Conferences"
-        }
-      ],
-      "artifact_refs": [],
-      "affected_kpis": [
-        "NPS/CSAT",
-        "Churn",
-        "Time-to-value",
-        "Support ticket volume"
-      ],
-      "competitive_context": "Unknown",
-      "urgency": {
-        "level": "Unknown",
-        "time_horizon": "Unknown"
-      },
-      "impact": "High",
-      "confidence": 0.73,
-      "blind_spots": [
-        "Exact scope and budget of the initiative are not stated.",
-        "Internal success metrics and timelines are not disclosed."
-      ],
-      "validation_questions": [
-        "Confirm scope (regions, products, or assets) implicated by these signals.",
-        "Request KPIs and milestones tied to this initiative."
-      ],
-      "value_prop_mapping": "Unknown"
-    },
-    {
-      "title": "Evidenced Growth Issue",
-      "category": "Growth",
-      "why_it_matters": "Observed signals point to growth pressure around: equinix, inc, sec, gov",
-      "primary_stakeholder": "Unknown",
-      "secondary_stakeholders": [],
-      "evidence": [
-        {
-          "source": "vertex_search",
-          "url_or_id": "https://www.sec.gov/edgar/browse/?CIK=0001104194",
-          "date": "",
-          "quote_or_note": "Equinix, Inc. - SEC.gov"
-        },
-        {
-          "source": "vertex_search",
-          "url_or_id": "https://www.sec.gov/Archives/edgar/data/1104194/000110465924049409/0001104659-24-049409-index.htm",
-          "date": "",
-          "quote_or_note": "Equinix, Inc. - SEC.gov"
-        },
-        {
-          "source": "vertex_search",
-          "url_or_id": "https://www.sec.gov/Archives/edgar/data/1104194/000110465924064104/0001104659-24-064104-index.htm",
-          "date": "",
-          "quote_or_note": "Equinix, Inc. - SEC.gov"
-        }
-      ],
-      "artifact_refs": [],
-      "affected_kpis": [
-        "Revenue growth",
-        "Win rate",
-        "Time-to-market",
-        "CapEx efficiency"
-      ],
-      "competitive_context": "Unknown",
-      "urgency": {
-        "level": "Unknown",
-        "time_horizon": "Unknown"
-      },
-      "impact": "High",
-      "confidence": 0.94,
-      "blind_spots": [
-        "Exact scope and budget of the initiative are not stated.",
-        "Internal success metrics and timelines are not disclosed."
-      ],
-      "validation_questions": [
-        "Confirm scope (regions, products, or assets) implicated by these signals.",
-        "Request KPIs and milestones tied to this initiative."
-      ],
-      "value_prop_mapping": "Unknown"
-    },
-    {
-      "title": "Capital Structure Changes Create Pressure for Efficient Growth",
-      "category": "Growth",
-      "why_it_matters": "Observed signals point to growth pressure around: equinix, announces, notes, pricing, billion",
-      "primary_stakeholder": "Unknown",
-      "secondary_stakeholders": [],
-      "evidence": [
-        {
-          "source": "vertex_search",
-          "url_or_id": "https://investors.equinix.com/news-events/press-releases/detail/921/equinix-announces-pricing-of-1-25-billion-notes-offering",
-          "date": "",
-          "quote_or_note": "Equinix Announces Pricing of $1.25 Billion Notes Offering"
-        },
-        {
-          "source": "vertex_search",
-          "url_or_id": "https://investors.equinix.com/news-events/press-releases/detail/931/equinix-announces-pricing-of-1-2-billion-notes-offering",
-          "date": "",
-          "quote_or_note": "Equinix Announces Pricing of €1.2 Billion Notes Offering"
-        },
-        {
-          "source": "vertex_search",
-          "url_or_id": "https://investors.equinix.com/news-events/press-releases/detail/896/equinix-announces-redemption-of-senior-notes",
-          "date": "",
-          "quote_or_note": "Equinix Announces Redemption of Senior Notes"
-        }
-      ],
-      "artifact_refs": [],
-      "affected_kpis": [
-        "Revenue growth",
-        "Win rate",
-        "Time-to-market",
-        "CapEx efficiency"
-      ],
-      "competitive_context": "Unknown",
-      "urgency": {
-        "level": "Unknown",
-        "time_horizon": "Unknown"
-      },
-      "impact": "High",
-      "confidence": 0.83,
-      "blind_spots": [
-        "Exact scope and budget of the initiative are not stated.",
-        "Internal success metrics and timelines are not disclosed."
-      ],
-      "validation_questions": [
-        "Confirm scope (regions, products, or assets) implicated by these signals.",
-        "Request KPIs and milestones tied to this initiative."
-      ],
-      "value_prop_mapping": "Unknown"
-    },
-    {
       "title": "Aggressive Expansion Risks a Fragmented Operating Posture",
       "category": "Operations",
-      "why_it_matters": "Observed signals point to operations pressure around: equinix, completes, acquisition, data, mainone",
+      "why_it_matters": "Observed signals point to operations pressure around: home, care, elite, news, company",
       "primary_stakeholder": "Unknown",
       "secondary_stakeholders": [],
       "evidence": [
         {
           "source": "vertex_search",
-          "url_or_id": "https://www.equinix.com/newsroom/press-releases/2022/05/equinix-completes-acquisition-of-four-data-centers-in-chile-from-empresa-nacional-de-telecomunicaciones-sa",
+          "url_or_id": "https://www.bloomberg.com/profile/company/1649438D:US",
           "date": "",
-          "quote_or_note": "Equinix Completes Acquisition of Four Data Centers in Chile from Empresa Nacional De Telecomunicaciones S.A."
+          "quote_or_note": "Elite Home Care - Company Profile and News - Bloomberg.com"
         },
         {
           "source": "vertex_search",
-          "url_or_id": "https://www.equinix.com/newsroom/press-releases/2022/03/equinix-completes-us-7.8-billion-acquisition-of-mainone",
+          "url_or_id": "https://www.capacitymedia.com/article/2b8llctqcw6hnkqv6ny4j/africa-data-centres-plans-major-expansion",
           "date": "",
-          "quote_or_note": "Equinix Completes US$7.8 Billion Acquisition of MainOne - Equinix"
+          "quote_or_note": "Africa Data Centres plans major expansion - Capacity Media"
         },
         {
           "source": "vertex_search",
-          "url_or_id": "https://www.equinix.com/newsroom/press-releases/2021/12/equinix-to-acquire-west-african-data-center-and-connectivity-solutions-provider-mainone",
+          "url_or_id": "https://homehealthcarenews.com/2018/08/elite-home-care-announces-new-acquisition/",
           "date": "",
-          "quote_or_note": "Equinix to Acquire West African Data Center and Connectivity Solutions Provider MainOne"
+          "quote_or_note": "Elite Home Care Announces New Acquisition - Home Health Care News"
         }
       ],
       "artifact_refs": [],
@@ -180,7 +42,7 @@
         "time_horizon": "Unknown"
       },
       "impact": "High",
-      "confidence": 0.83,
+      "confidence": 0.86,
       "blind_spots": [
         "Exact scope and budget of the initiative are not stated.",
         "Internal success metrics and timelines are not disclosed."
@@ -192,75 +54,25 @@
       "value_prop_mapping": "Unknown"
     },
     {
-      "title": "Evidenced Growth Issue",
-      "category": "Growth",
-      "why_it_matters": "Observed signals point to growth pressure around: equinix, eqix, analyst, forecasts, nasdaq",
+      "title": "Aggressive Expansion Risks a Fragmented Operating Posture",
+      "category": "Operations",
+      "why_it_matters": "Observed signals point to operations pressure around: health, home, care, superior, group",
       "primary_stakeholder": "Unknown",
       "secondary_stakeholders": [],
       "evidence": [
         {
           "source": "vertex_search",
-          "url_or_id": "https://www.nasdaq.com/market-activity/stocks/eqix/forecasts",
+          "url_or_id": "https://homehealthcarenews.com/2021/04/superior-health-group-acquires-elite-home-care/",
           "date": "",
-          "quote_or_note": "Equinix (EQIX) - Analyst Forecasts - Nasdaq"
-        },
-        {
-          "source": "vertex_search",
-          "url_or_id": "https://www.equinix.com/newsroom/press-releases/2024/04/equinix-appoints-scott-creasey-as-chief-accounting-officer",
-          "date": "",
-          "quote_or_note": "Equinix Appoints Scott Creasey as Chief Accounting Officer - Equinix"
-        },
-        {
-          "source": "vertex_search",
-          "url_or_id": "https://www.tipranks.com/stocks/eqix/forecast",
-          "date": "",
-          "quote_or_note": "Equinix Stock Analysis: Is It Time To Buy? - TipRanks"
+          "quote_or_note": "Superior Health Group Acquires Elite Home Care - Home Health Care News"
         }
       ],
       "artifact_refs": [],
       "affected_kpis": [
-        "Revenue growth",
-        "Win rate",
-        "Time-to-market",
-        "CapEx efficiency"
-      ],
-      "competitive_context": "Unknown",
-      "urgency": {
-        "level": "Unknown",
-        "time_horizon": "Unknown"
-      },
-      "impact": "High",
-      "confidence": 0.83,
-      "blind_spots": [
-        "Exact scope and budget of the initiative are not stated.",
-        "Internal success metrics and timelines are not disclosed."
-      ],
-      "validation_questions": [
-        "Confirm scope (regions, products, or assets) implicated by these signals.",
-        "Request KPIs and milestones tied to this initiative."
-      ],
-      "value_prop_mapping": "Unknown"
-    },
-    {
-      "title": "Evidenced Growth Issue",
-      "category": "Growth",
-      "why_it_matters": "Observed signals point to growth pressure around: equinix, inc, eqix, analyst, ratings",
-      "primary_stakeholder": "Unknown",
-      "secondary_stakeholders": [],
-      "evidence": [
-        {
-          "source": "vertex_search",
-          "url_or_id": "https://www.nasdaq.com/market-activity/stocks/eqix/analyst-ratings",
-          "date": "",
-          "quote_or_note": "Equinix, Inc. (EQIX) Analyst Ratings - Nasdaq"
-        }
-      ],
-      "artifact_refs": [],
-      "affected_kpis": [
-        "Revenue growth",
-        "Win rate",
-        "Time-to-market",
-        "CapEx efficiency"
+        "Change failure rate",
+        "Deployment lead time",
+        "SLA/SLO attainment",
+        "Service availability"
       ],
       "competitive_context": "Unknown",
       "urgency": {
@@ -280,29 +92,205 @@
       "value_prop_mapping": "Unknown"
     },
     {
-      "title": "Exposure to Cyber Risk Requires Hardening of Core Controls",
-      "category": "Risk",
-      "why_it_matters": "Observed signals point to risk pressure around: equinix, lockbit, ransomware, attack, data",
+      "title": "Aggressive Expansion Risks a Fragmented Operating Posture",
+      "category": "CX",
+      "why_it_matters": "Observed signals point to cx pressure around: elite, home, care, new, announces",
       "primary_stakeholder": "Unknown",
       "secondary_stakeholders": [],
       "evidence": [
         {
           "source": "vertex_search",
-          "url_or_id": "https://www.equinix.com/newsroom/press-releases/2022/03/equinix-completes-acquisition-of-mainone",
+          "url_or_id": "https://www.einnews.com/pr_news/694221084/elite-home-care-announces-new-leadership",
           "date": "",
-          "quote_or_note": "Equinix Completes Acquisition of MainOne - Equinix"
+          "quote_or_note": "Elite Home Care Announces New Leadership"
         },
         {
           "source": "vertex_search",
-          "url_or_id": "https://www.bleepingcomputer.com/news/security/equinix-confirms-lockbit-ransomware-attack-data-theft/",
+          "url_or_id": "https://www.wfmz.com/news/pr_newswire/pr_newswire_pennsylvania/elite-home-care-expands-services-to-meet-growing-demand/article_f3922949-d29a-539f-869c-f99e81144963.html",
           "date": "",
-          "quote_or_note": "Equinix confirms LockBit ransomware attack, data theft"
+          "quote_or_note": "Elite Home Care Expands Services to Meet Growing Demand"
         },
         {
           "source": "vertex_search",
-          "url_or_id": "https://www.crn.com/news/data-center/equinix-hit-by-lockbit-ransomware-attack-customer-data-stolen",
+          "url_or_id": "https://www.wfmz.com/news/pr_newswire/pr_newswire_pennsylvania/elite-home-care-opens-new-location-in-wyomissing-pa/article_9433c894-361a-5294-8a9a-7354e844458a.html",
           "date": "",
-          "quote_or_note": "Equinix hit by LockBit ransomware attack, customer data stolen"
+          "quote_or_note": "Elite Home Care Opens New Location in Wyomissing, PA"
+        }
+      ],
+      "artifact_refs": [],
+      "affected_kpis": [
+        "NPS/CSAT",
+        "Churn",
+        "Time-to-value",
+        "Support ticket volume"
+      ],
+      "competitive_context": "Unknown",
+      "urgency": {
+        "level": "Unknown",
+        "time_horizon": "Unknown"
+      },
+      "impact": "High",
+      "confidence": 0.83,
+      "blind_spots": [
+        "Exact scope and budget of the initiative are not stated.",
+        "Internal success metrics and timelines are not disclosed."
+      ],
+      "validation_questions": [
+        "Confirm scope (regions, products, or assets) implicated by these signals.",
+        "Request KPIs and milestones tied to this initiative."
+      ],
+      "value_prop_mapping": "Unknown"
+    },
+    {
+      "title": "Evidenced Growth Issue",
+      "category": "Growth",
+      "why_it_matters": "Observed signals point to growth pressure around: elite, home, care, inc, sec",
+      "primary_stakeholder": "Unknown",
+      "secondary_stakeholders": [],
+      "evidence": [
+        {
+          "source": "vertex_search",
+          "url_or_id": "https://www.sec.gov/edgar/browse/?CIK=1874035",
+          "date": "",
+          "quote_or_note": "Elite Home Care, Inc. - SEC.gov"
+        }
+      ],
+      "artifact_refs": [],
+      "affected_kpis": [
+        "Revenue growth",
+        "Win rate",
+        "Time-to-market",
+        "CapEx efficiency"
+      ],
+      "competitive_context": "Unknown",
+      "urgency": {
+        "level": "Unknown",
+        "time_horizon": "Unknown"
+      },
+      "impact": "High",
+      "confidence": 0.84,
+      "blind_spots": [
+        "Exact scope and budget of the initiative are not stated.",
+        "Internal success metrics and timelines are not disclosed."
+      ],
+      "validation_questions": [
+        "Confirm scope (regions, products, or assets) implicated by these signals.",
+        "Request KPIs and milestones tied to this initiative."
+      ],
+      "value_prop_mapping": "Unknown"
+    },
+    {
+      "title": "Aggressive Expansion Risks a Fragmented Operating Posture",
+      "category": "Operations",
+      "why_it_matters": "Observed signals point to operations pressure around: home, care, choice, one, announces",
+      "primary_stakeholder": "Unknown",
+      "secondary_stakeholders": [],
+      "evidence": [
+        {
+          "source": "vertex_search",
+          "url_or_id": "https://finance.yahoo.com/news/choice-one-home-care-announces-133000898.html",
+          "date": "",
+          "quote_or_note": "Choice One Home Care Announces Acquisition of Elite Home Care - Yahoo Finance"
+        }
+      ],
+      "artifact_refs": [],
+      "affected_kpis": [
+        "Change failure rate",
+        "Deployment lead time",
+        "SLA/SLO attainment",
+        "Service availability"
+      ],
+      "competitive_context": "Unknown",
+      "urgency": {
+        "level": "Unknown",
+        "time_horizon": "Unknown"
+      },
+      "impact": "High",
+      "confidence": 0.73,
+      "blind_spots": [
+        "Exact scope and budget of the initiative are not stated.",
+        "Internal success metrics and timelines are not disclosed."
+      ],
+      "validation_questions": [
+        "Confirm scope (regions, products, or assets) implicated by these signals.",
+        "Request KPIs and milestones tied to this initiative."
+      ],
+      "value_prop_mapping": "Unknown"
+    },
+    {
+      "title": "Aggressive Expansion Risks a Fragmented Operating Posture",
+      "category": "Growth",
+      "why_it_matters": "Observed signals point to growth pressure around: data, center, expansion, emerging, markets",
+      "primary_stakeholder": "Unknown",
+      "secondary_stakeholders": [],
+      "evidence": [
+        {
+          "source": "vertex_search",
+          "url_or_id": "https://www.dgtlinfra.com/articles/data-center-expansion-in-emerging-markets",
+          "date": "",
+          "quote_or_note": "Data Center Expansion in Emerging Markets - Dgtl Infra Network"
+        },
+        {
+          "source": "vertex_search",
+          "url_or_id": "https://www.mordorintelligence.com/industry-reports/edge-data-center-market",
+          "date": "",
+          "quote_or_note": "Edge Data Center Market - Growth, Trends, COVID-19 Impact, and Forecasts (2023 - 2028)"
+        },
+        {
+          "source": "vertex_search",
+          "url_or_id": "https://www.indeed.com/cmp/Elite-Home-Care",
+          "date": "",
+          "quote_or_note": "Elite Home Care Careers and Employment | Indeed.com"
+        }
+      ],
+      "artifact_refs": [],
+      "affected_kpis": [
+        "Revenue growth",
+        "Win rate",
+        "Time-to-market",
+        "CapEx efficiency"
+      ],
+      "competitive_context": "Unknown",
+      "urgency": {
+        "level": "Unknown",
+        "time_horizon": "Unknown"
+      },
+      "impact": "High",
+      "confidence": 0.83,
+      "blind_spots": [
+        "Exact scope and budget of the initiative are not stated.",
+        "Internal success metrics and timelines are not disclosed."
+      ],
+      "validation_questions": [
+        "Confirm scope (regions, products, or assets) implicated by these signals.",
+        "Request KPIs and milestones tied to this initiative."
+      ],
+      "value_prop_mapping": "Unknown"
+    },
+    {
+      "title": "Evidenced Risk Issue",
+      "category": "Risk",
+      "why_it_matters": "Observed signals point to risk pressure around: elite, home, care, company, profile",
+      "primary_stakeholder": "Unknown",
+      "secondary_stakeholders": [],
+      "evidence": [
+        {
+          "source": "vertex_search",
+          "url_or_id": "https://www.zoominfo.com/c/elite-home-care/353479718",
+          "date": "",
+          "quote_or_note": "Elite Home Care - Company Profile - ZoomInfo"
+        },
+        {
+          "source": "vertex_search",
+          "url_or_id": "https://www.elitehomecare.net/about-us/",
+          "date": "",
+          "quote_or_note": "Elite Home Care - Overview"
+        },
+        {
+          "source": "vertex_search",
+          "url_or_id": "https://www.elitehomecare.net/services/",
+          "date": "",
+          "quote_or_note": "Elite Home Care - Services"
         }
       ],
       "artifact_refs": [],
@@ -332,21 +320,27 @@
     {
       "title": "Evidenced Risk Issue",
       "category": "Risk",
-      "why_it_matters": "Observed signals point to risk pressure around: equinix, sustainability, report, participate, upcoming",
+      "why_it_matters": "Observed signals point to risk pressure around: home, care, elite, careers, jobs",
       "primary_stakeholder": "Unknown",
       "secondary_stakeholders": [],
       "evidence": [
         {
           "source": "vertex_search",
-          "url_or_id": "https://www.equinix.com/resources/reports/sustainability-report",
+          "url_or_id": "https://www.elitehomecare.net/careers/",
           "date": "",
-          "quote_or_note": "Equinix Sustainability Report 2023"
+          "quote_or_note": "Elite Home Care Careers"
         },
         {
           "source": "vertex_search",
-          "url_or_id": "https://www.equinix.com/newsroom/press-releases/2024/05/equinix-to-participate-in-upcoming-investor-conferences",
+          "url_or_id": "https://www.indeed.com/q-Elite-Home-Care-jobs.html",
           "date": "",
-          "quote_or_note": "Equinix to Participate in Upcoming Investor Conferences - Equinix"
+          "quote_or_note": "Elite Home Care Jobs, Employment | Indeed.com"
+        },
+        {
+          "source": "vertex_search",
+          "url_or_id": "https://www.medicare.gov/care-compare/results?searchType=HomeHealth&providerType=HomeHealth&city=New%20York&state=NY&page=1",
+          "date": "",
+          "quote_or_note": "Home Health Care in New York, NY - Medicare.gov"
         }
       ],
       "artifact_refs": [],
@@ -362,7 +356,7 @@
         "time_horizon": "Unknown"
       },
       "impact": "High",
-      "confidence": 0.8,
+      "confidence": 0.83,
       "blind_spots": [
         "Exact scope and budget of the initiative are not stated.",
         "Internal success metrics and timelines are not disclosed."
@@ -374,73 +368,23 @@
       "value_prop_mapping": "Unknown"
     },
     {
-      "title": "Evidenced Growth Issue",
-      "category": "Growth",
-      "why_it_matters": "Observed signals point to growth pressure around: equinix, metal, gigaom, radar, report",
-      "primary_stakeholder": "Unknown",
-      "secondary_stakeholders": [],
-      "evidence": [
-        {
-          "source": "vertex_search",
-          "url_or_id": "https://www.equinix.com/metal",
-          "date": "",
-          "quote_or_note": "Equinix Metal"
-        },
-        {
-          "source": "vertex_search",
-          "url_or_id": "https://www.equinix.com/resources/analyst-reports/gigaom-radar-report-colocation-services",
-          "date": "",
-          "quote_or_note": "GigaOm Radar Report for Colocation Services"
-        }
-      ],
-      "artifact_refs": [],
-      "affected_kpis": [
-        "Revenue growth",
-        "Win rate",
-        "Time-to-market",
-        "CapEx efficiency"
-      ],
-      "competitive_context": "Unknown",
-      "urgency": {
-        "level": "Unknown",
-        "time_horizon": "Unknown"
-      },
-      "impact": "High",
-      "confidence": 0.8,
-      "blind_spots": [
-        "Exact scope and budget of the initiative are not stated.",
-        "Internal success metrics and timelines are not disclosed."
-      ],
-      "validation_questions": [
-        "Confirm scope (regions, products, or assets) implicated by these signals.",
-        "Request KPIs and milestones tied to this initiative."
-      ],
-      "value_prop_mapping": "Unknown"
-    },
-    {
-      "title": "Simplifying Private Cloud Deployments to Improve CX",
+      "title": "Evidenced Operations Issue",
       "category": "Operations",
-      "why_it_matters": "Observed signals point to operations pressure around: equinix, metal, simplifies, hybrid, cloud",
+      "why_it_matters": "Observed signals point to operations pressure around: elite, home, care, crunchbase, company",
       "primary_stakeholder": "Unknown",
       "secondary_stakeholders": [],
       "evidence": [
         {
           "source": "vertex_search",
-          "url_or_id": "https://www.equinix.com/newsroom/press-releases/2021/05/equinix-metal-simplifies-hybrid-cloud-deployments-with-vmware-tanzu",
+          "url_or_id": "https://www.crunchbase.com/organization/elite-home-care",
           "date": "",
-          "quote_or_note": "Equinix Metal Simplifies Hybrid Cloud Deployments with VMware Tanzu"
+          "quote_or_note": "Elite Home Care - Crunchbase Company Profile & Funding"
         },
         {
           "source": "vertex_search",
-          "url_or_id": "https://www.equinix.com/newsroom/press-releases/2024/02/equinix-reports-fourth-quarter-and-full-year-2023-results",
+          "url_or_id": "https://elitehomecare.com/sase/",
           "date": "",
-          "quote_or_note": "Equinix Reports Fourth Quarter and Full Year 2023 Results"
-        },
-        {
-          "source": "vertex_search",
-          "url_or_id": "https://www.equinix.com/newsroom/press-releases/2024/08/equinix-to-participate-in-upcoming-investor-conferences",
-          "date": "",
-          "quote_or_note": "Equinix to Participate in Upcoming Investor Conferences"
+          "quote_or_note": "SASE - Elite Home Care"
         }
       ],
       "artifact_refs": [],
@@ -456,7 +400,7 @@
         "time_horizon": "Unknown"
       },
       "impact": "High",
-      "confidence": 0.83,
+      "confidence": 0.8,
       "blind_spots": [
         "Exact scope and budget of the initiative are not stated.",
         "Internal success metrics and timelines are not disclosed."

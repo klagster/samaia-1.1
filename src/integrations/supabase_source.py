@@ -1,4 +1,4 @@
-from typing import Any, Dict, Iterable, Optional
+from typing import Any, Dict, Iterable, Optional, List
 import os
 import logging
 from supabase import create_client, Client
@@ -262,3 +262,40 @@ def stream_target_account(target_account_id: str, page_size: int = 5000) -> Dict
         page_size=page_size,
     )
     return {"target_account": stream}
+
+
+def list_target_accounts_for_campaign(campaign_id: str, page_size: int = 5000) -> List[Dict[str, Any]]:
+    """Return all target accounts for a given campaign as a materialized list.
+
+    This is used by GCF to fan out and run the pipeline for each target account
+    when only a campaign_id is provided. We intentionally materialize the list
+    instead of returning a generator so the caller can safely iterate multiple
+    times and log counts without re-querying Supabase.
+    """
+    logging.info(
+        f"[Supabase Source] list_target_accounts_for_campaign: campaign_id={campaign_id}, page_size={page_size}"
+    )
+    supabase = _create_client()
+
+    rows: List[Dict[str, Any]] = []
+    # Keep the select aligned with stream_campaign_datasets target_account fields
+    for r in _stream_rows(
+        supabase,
+        table="target_accounts",
+        select=(
+            "id,campaign_id,"
+            "account_name,"
+            "company_size,company_website,industry,location,"
+            "contact_person,contact_email,"
+            "status,priority,notes"
+        ),
+        filters={"campaign_id": f"eq.{campaign_id}"},
+        order="priority.desc",
+        page_size=page_size,
+    ):
+        rows.append(r)
+
+    logging.info(
+        f"[Supabase Source] list_target_accounts_for_campaign: fetched {len(rows)} target_accounts"
+    )
+    return rows

@@ -18,9 +18,17 @@ SUPABASE_URL ?= https://gmgdfpdovsuzyqbyjdca.supabase.co
 SUPABASE_SERVICE_KEY ?=
 SUPABASE_SCHEMA ?= public
 
+# Optional: bearer token required by the CF (used by Lovable/clients)
+RUN_TOKEN ?=
+
 # Test UUIDs for supabase target (replace when running)
 CAMPAIGN_ID ?= 04d67e16-9aea-4bba-bab2-324845ae2ded
 TARGET_ACCOUNT_ID ?= 0d2832d4-f4f5-42fe-8ea5-2dbd6765a46d
+
+# Pagination size for Supabase listing (used in local tests)
+PAGE_SIZE ?= 5000
+# Optional: webhook callback URL (read from .env in local/dev)
+CALLBACK_URL ?=
 
 # Default inputs for full run
 INPUTS ?= user_inputs.json
@@ -32,12 +40,13 @@ CAMPAIGN_CHALLENGES ?= campaign-challenges.json
 # Convenience: if .env exists, export it for local runs
 # (Targets that call python or the functions framework will source this.)
 ENV_FILE := .env
+# Auto-generated YAML for gcloud --env-vars-file
+ENV_YAML := .env.yaml
 
 .PHONY: help deps install lint format test run run-with-inputs run-full api \
         gcf-deploy gcf-local gcf-test gcf-deploy-supabase gcf-local-supabase gcf-test-supabase \
-        check-supabase-env check-tools logs clean env-print env-print-dotenv secrets-push-supabase gcf-deploy-supabase-secrets curl-local-supabase \
-        run-vertex run-full-vertex env-print-vertex gcf-deploy-vertex
-
+        check-supabase-env check-tools logs clean env-print env-print-dotenv curl-local-supabase \
+        run-vertex run-full-vertex env-print-vertex gcf-deploy-vertex env-to-yaml
 help:
 	@echo ""
 	@echo "Targets:"
@@ -60,13 +69,15 @@ help:
 	@echo "  gcf-deploy-supabase  Deploy Gen2 HTTP function (Supabase-backed handler)"
 	@echo "  gcf-local-supabase   Run functions-framework locally for gcf_http_supabase"
 	@echo "  gcf-test-supabase    curl test against local Supabase handler"
+	@echo "  gcf-test-supabase-all  curl test against local Supabase handler (campaign-only; processes all target accounts)"
+	@echo "  curl-local-supabase-all  Curl the local Supabase handler with only CAMPAIGN_ID (fan-out over all target accounts)"
+	@echo "  env-to-yaml          Convert .env (dotenv) to .env.yaml (YAML) for gcloud"
+	@echo "  curl-local-supabase-webhook  Curl local Supabase handler with CAMPAIGN_ID + CALLBACK_URL from .env"
+	@echo "      (uses Authorization: Bearer RUN_TOKEN automatically when RUN_TOKEN is set)"
 	@echo "  logs                 Tail recent logs for deployed function(s)"
 	@echo "  clean                Remove Python caches/build artifacts"
 	@echo "  env-print            Show key env values (masks secrets)"
 	@echo "  env-print-dotenv    Source .env, then show env values (masks secrets)"
-	@echo "  secrets-push-supabase  Create/Update Secret Manager secret SUPABASE_SERVICE_KEY from current env"
-	@echo "  gcf-deploy-supabase-secrets Deploy Supabase handler using Secret Manager (no plaintext key in deploy)"
-	@echo "  curl-local-supabase  Curl the local Supabase handler using Makefile IDs"
 	@echo ""
 
 deps:
@@ -145,7 +156,7 @@ gcf-deploy:
 	  --allow-unauthenticated \
 	  --timeout 540s \
 	  --memory 2Gi \
-	  --set-env-vars "CORS_ALLOW_ORIGINS=$(ALLOWED_ORIGINS)"
+	  --set-env-vars "CORS_ALLOW_ORIGINS=$(ALLOWED_ORIGINS),RUN_TOKEN=$(RUN_TOKEN)"
 
 gcf-deploy-vertex:
 	gcloud functions deploy $(GCF_NAME) \
@@ -179,6 +190,7 @@ check-supabase-env:
 	  exit 1; \
 	fi
 
+
 gcf-deploy-supabase: check-supabase-env
 	gcloud functions deploy $(GCF_NAME_SUPABASE) \
 	  --gen2 \
@@ -190,7 +202,33 @@ gcf-deploy-supabase: check-supabase-env
 	  --allow-unauthenticated \
 	  --timeout 540s \
 	  --memory 2Gi \
-	  --set-env-vars "CORS_ALLOW_ORIGINS=$(ALLOWED_ORIGINS),SUPABASE_URL=$(SUPABASE_URL),SUPABASE_SERVICE_KEY=$(SUPABASE_SERVICE_KEY),SUPABASE_SCHEMA=$(SUPABASE_SCHEMA)"
+	  --set-env-vars "CORS_ALLOW_ORIGINS=$(ALLOWED_ORIGINS),SUPABASE_URL=$(SUPABASE_URL),SUPABASE_SERVICE_KEY=$(SUPABASE_SERVICE_KEY),SUPABASE_SCHEMA=$(SUPABASE_SCHEMA),RUN_TOKEN=$(RUN_TOKEN)"
+
+# Deploy Supabase handler with webhook (no Secret Manager)
+gcf-deploy-supabase-webhook: check-project
+	@if [ ! -f ".env" ]; then \
+	  echo "❌ Missing .env file. Create one with WEBHOOK_SECRET, CALLBACK_URL, etc."; \
+	  exit 1; \
+	fi; \
+	set -a; . ".env"; set +a; \
+	if [ -z "$$SUPABASE_URL" ] || [ -z "$$SUPABASE_SERVICE_KEY" ]; then \
+	  echo "❌ Missing SUPABASE_URL or SUPABASE_SERVICE_KEY after sourcing .env"; \
+	  echo "   Fix your .env or pass them inline: SUPABASE_URL=... SUPABASE_SERVICE_KEY=... make gcf-deploy-supabase-webhook"; \
+	  exit 1; \
+	fi; \
+	echo "🚀 Deploying $(GCF_NAME_SUPABASE) using .env (no Secret Manager, includes webhook)"; \
+	gcloud functions deploy $(GCF_NAME_SUPABASE) \
+	  --gen2 \
+	  --runtime python312 \
+	  --region $(REGION) \
+	  --entry-point http_handler \
+	  --source . \
+	  --trigger-http \
+	  --allow-unauthenticated \
+	  --timeout 540s \
+	  --memory 2Gi \
+	  --set-env-vars "CORS_ALLOW_ORIGINS=$$CORS_ALLOW_ORIGINS,SUPABASE_URL=$$SUPABASE_URL,SUPABASE_SERVICE_KEY=$$SUPABASE_SERVICE_KEY,SUPABASE_KEY=$$SUPABASE_SERVICE_KEY,SUPABASE_SCHEMA=$$SUPABASE_SCHEMA,WEBHOOK_SECRET=$$WEBHOOK_SECRET,RUN_TOKEN=$$RUN_TOKEN,CALLBACK_URL=$$CALLBACK_URL"; \
+	echo "✅ Deployed $(GCF_NAME_SUPABASE) using .env (webhook, no Secret Manager)"
 
 gcf-local-supabase:
 	@if [ -f "$(ENV_FILE)" ]; then set -a; . "$(ENV_FILE)"; set +a; fi; \
@@ -205,7 +243,15 @@ gcf-test-supabase:
 	@echo "POST http://localhost:$(PORT) (Supabase handler)"
 	@curl -s -X POST http://localhost:$(PORT) \
 	  -H "Content-Type: application/json" \
-	  -d '{"campaign_id":"$(CAMPAIGN_ID)","target_account_id":"$(TARGET_ACCOUNT_ID)","page_size":5000}' | (jq . 2>/dev/null || cat)
+	  -d '{"campaign_id":"$(CAMPAIGN_ID)","target_account_id":"$(TARGET_ACCOUNT_ID)","page_size":$(PAGE_SIZE)}' | (jq . 2>/dev/null || cat)
+
+# Test campaign-only flow (fan-out over all target accounts)
+gcf-test-supabase-all:
+	@echo "POST http://localhost:$(PORT) (Supabase handler; campaign-only/all-TAs)"
+	@curl -s -X POST http://localhost:$(PORT) \
+	  -H "Content-Type: application/json" \
+	  -d '{"campaign_id":"$(CAMPAIGN_ID)","page_size":$(PAGE_SIZE)}' | (jq . 2>/dev/null || cat)
+
 
 # ---------- Ops helpers ----------
 logs:
@@ -230,7 +276,22 @@ env-print:
 	  echo "<empty>"; \
 	fi; \
 	printf "CAMPAIGN_ID=\t%s\n" "$(CAMPAIGN_ID)"; \
-	printf "TARGET_ACCOUNT_ID=\t%s\n" "$(TARGET_ACCOUNT_ID)"
+	printf "TARGET_ACCOUNT_ID=\t%s\n" "$(TARGET_ACCOUNT_ID)"; \
+	printf "CALLBACK_URL=\t%s\n" "$(CALLBACK_URL)"; \
+	printf "WEBHOOK_SECRET=\t"; \
+	if [ -n "$(WEBHOOK_SECRET)" ]; then \
+	  wlen=$$(printf "%s" "$(WEBHOOK_SECRET)" | wc -c | tr -d ' '); \
+	  printf "%s… (len=%s)\n" "$$([ $${wlen} -gt 4 ] && printf "%s" "$(WEBHOOK_SECRET)" | cut -c1-4 || printf "****")" "$$wlen"; \
+	else \
+	  echo "<empty>"; \
+	fi; \
+	printf "RUN_TOKEN=\t"; \
+	if [ -n "$(RUN_TOKEN)" ]; then \
+	  rlen=$$(printf "%s" "$(RUN_TOKEN)" | wc -c | tr -d ' '); \
+	  printf "%s… (len=%s)\n" "$$([ $${rlen} -gt 4 ] && printf "%s" "$(RUN_TOKEN)" | cut -c1-4 || printf "****")" "$$rlen"; \
+	else \
+	  echo "<empty>"; \
+	fi
 
 env-print-dotenv:
 	@if [ -f "$(ENV_FILE)" ]; then set -a; . "$(ENV_FILE)"; set +a; fi; \
@@ -247,6 +308,36 @@ env-print-vertex:
 	  echo "<empty>"; \
 	fi
 
+# Convert dotenv (.env) to YAML (.env.yaml) for gcloud --env-vars-file
+# - Excludes SUPABASE_SERVICE_KEY because it is provided via Secret Manager in deploy targets
+
+.PHONY: env-to-yaml
+env-to-yaml:
+	@if [ ! -f "$(ENV_FILE)" ]; then \
+	  echo "❌ Missing $(ENV_FILE). Create it first."; \
+	  exit 1; \
+	fi; \
+	echo "🔧 Generating $(ENV_YAML) from $(ENV_FILE) (excluding SUPABASE_SERVICE_KEY)"; \
+	{ \
+	  echo "# generated from .env"; \
+	  while IFS= read -r line; do \
+	    case "$$line" in \
+	      ''|\#*) continue ;; \
+	    esac; \
+	    key="$${line%%=*}"; val="$${line#*=}"; \
+	    key="$${key## }"; key="$${key%% }"; \
+	    if [ "$$key" = "SUPABASE_SERVICE_KEY" ]; then continue; fi; \
+	    # strip surrounding quotes if present \
+	    case "$$val" in \
+	      \"*\") val="$${val%\"}"; val="$${val#\"}" ;; \
+	      \"\"*\"\") val="$${val%\"}"; val="$${val#\"}" ;; \
+	      \"\'\"*\"\'\"\") val="$${val%\'"'"'}"; val="$${val#'"'"'"}" ;; \
+	    esac; \
+	    python3 -c 'import json,sys; k=sys.argv[1]; v=sys.argv[2]; print(f"{k}: {json.dumps(v)}")' "$$key" "$$val"; \
+	  done < "$(ENV_FILE)"; \
+	} > "$(ENV_YAML)"; \
+	echo "✅ Wrote $(ENV_YAML)"
+
 # GCP project used for secret-based deploys (set at runtime: make … PROJECT=my-project)
 PROJECT ?=
 
@@ -256,36 +347,28 @@ check-project:
 	  exit 1; \
 	fi
 
-# Create or update Secret Manager entry SUPABASE_SERVICE_KEY from current env
-# Requires: gcloud auth and PROJECT set
-secrets-push-supabase: check-project
-	@if [ -z "$(SUPABASE_SERVICE_KEY)" ]; then \
-	  echo "Error: SUPABASE_SERVICE_KEY is empty in your environment. Export it or put it in .env, then run: make secrets-push-supabase PROJECT=<proj>"; \
-	  exit 1; \
-	fi
-	@gcloud secrets describe SUPABASE_SERVICE_KEY --project=$(PROJECT) >/dev/null 2>&1 || \
-	  gcloud secrets create SUPABASE_SERVICE_KEY --project=$(PROJECT) --replication-policy=automatic
-	@printf "%s" "$(SUPABASE_SERVICE_KEY)" | gcloud secrets versions add SUPABASE_SERVICE_KEY --project=$(PROJECT) --data-file=-
-	@echo "Secret SUPABASE_SERVICE_KEY updated in project $(PROJECT)."
-
-# Deploy using Secret Manager (avoids passing plaintext key in --set-env-vars)
-gcf-deploy-supabase-secrets: check-project
-	gcloud functions deploy $(GCF_NAME_SUPABASE) \
-	  --gen2 \
-	  --runtime python312 \
-	  --region $(REGION) \
-	  --entry-point http_handler \
-	  --source . \
-	  --trigger-http \
-	  --allow-unauthenticated \
-	  --timeout 540s \
-	  --memory 2Gi \
-	  --set-env-vars "CORS_ALLOW_ORIGINS=$(ALLOWED_ORIGINS),SUPABASE_URL=$(SUPABASE_URL),SUPABASE_SCHEMA=$(SUPABASE_SCHEMA)" \
-	  --set-secrets "SUPABASE_SERVICE_KEY=projects/$(PROJECT)/secrets/SUPABASE_SERVICE_KEY:latest"
 
 # Convenience curl against local Supabase handler using the IDs in this Makefile
 curl-local-supabase:
 	@echo "POST http://localhost:$(PORT)"
 	@curl -s -X POST http://localhost:$(PORT) \
 	  -H "Content-Type: application/json" \
-	  -d '{"campaign_id":"$(CAMPAIGN_ID)","target_account_id":"$(TARGET_ACCOUNT_ID)","page_size":5000}' | (jq . 2>/dev/null || cat)
+	  -d '{"campaign_id":"$(CAMPAIGN_ID)","target_account_id":"$(TARGET_ACCOUNT_ID)","page_size":$(PAGE_SIZE)}' | (jq . 2>/dev/null || cat)
+
+# Convenience curl: campaign-only fan-out over all target accounts
+curl-local-supabase-all:
+	@echo "POST http://localhost:$(PORT) (campaign-only/all-TAs)"
+	@curl -s -X POST http://localhost:$(PORT) \
+	  -H "Content-Type: application/json" \
+	  -d '{"campaign_id":"$(CAMPAIGN_ID)","page_size":$(PAGE_SIZE)}' | (jq . 2>/dev/null || cat)
+
+# Convenience curl: campaign-only fan-out with webhook callback URL from .env
+curl-local-supabase-webhook:
+	@echo "POST http://localhost:$(PORT) (campaign-only/all-TAs with webhook)"
+	@if [ -f "$(ENV_FILE)" ]; then set -a; . "$(ENV_FILE)"; set +a; fi; \
+	AUTH_HDR=""; \
+	if [ -n "$$RUN_TOKEN" ]; then AUTH_HDR="Authorization: Bearer $$RUN_TOKEN"; fi; \
+	curl -s -X POST http://localhost:$(PORT) \
+	  -H "Content-Type: application/json" \
+	  $${AUTH_HDR:+-H "$$AUTH_HDR"} \
+	  -d '{"campaign_id":"$(CAMPAIGN_ID)","page_size":$(PAGE_SIZE),"callback_url":"$(CALLBACK_URL)"}' | (jq . 2>/dev/null || cat)

@@ -1,9 +1,25 @@
 {
-  "company": "Equinix",
+  "company": "Elite Home Care",
   "time_window": "last 12-18 months",
   "alignments": [
     {
-      "issue_title": "Evidenced CX Issue",
+      "issue_title": "Aggressive Expansion Risks a Fragmented Operating Posture",
+      "issue_category": "Operations",
+      "aligned_challenges": [],
+      "gaps": [
+        "No suitable taxonomy match found based on lexical/semantic overlap."
+      ]
+    },
+    {
+      "issue_title": "Aggressive Expansion Risks a Fragmented Operating Posture",
+      "issue_category": "Operations",
+      "aligned_challenges": [],
+      "gaps": [
+        "No suitable taxonomy match found based on lexical/semantic overlap."
+      ]
+    },
+    {
+      "issue_title": "Aggressive Expansion Risks a Fragmented Operating Posture",
       "issue_category": "CX",
       "aligned_challenges": [],
       "gaps": [
@@ -19,14 +35,6 @@
       ]
     },
     {
-      "issue_title": "Capital Structure Changes Create Pressure for Efficient Growth",
-      "issue_category": "Growth",
-      "aligned_challenges": [],
-      "gaps": [
-        "No suitable taxonomy match found based on lexical/semantic overlap."
-      ]
-    },
-    {
       "issue_title": "Aggressive Expansion Risks a Fragmented Operating Posture",
       "issue_category": "Operations",
       "aligned_challenges": [],
@@ -35,7 +43,7 @@
       ]
     },
     {
-      "issue_title": "Evidenced Growth Issue",
+      "issue_title": "Aggressive Expansion Risks a Fragmented Operating Posture",
       "issue_category": "Growth",
       "aligned_challenges": [],
       "gaps": [
@@ -43,15 +51,7 @@
       ]
     },
     {
-      "issue_title": "Evidenced Growth Issue",
-      "issue_category": "Growth",
-      "aligned_challenges": [],
-      "gaps": [
-        "No suitable taxonomy match found based on lexical/semantic overlap."
-      ]
-    },
-    {
-      "issue_title": "Exposure to Cyber Risk Requires Hardening of Core Controls",
+      "issue_title": "Evidenced Risk Issue",
       "issue_category": "Risk",
       "aligned_challenges": [],
       "gaps": [
@@ -67,15 +67,7 @@
       ]
     },
     {
-      "issue_title": "Evidenced Growth Issue",
-      "issue_category": "Growth",
-      "aligned_challenges": [],
-      "gaps": [
-        "No suitable taxonomy match found based on lexical/semantic overlap."
-      ]
-    },
-    {
-      "issue_title": "Simplifying Private Cloud Deployments to Improve CX",
+      "issue_title": "Evidenced Operations Issue",
       "issue_category": "Operations",
       "aligned_challenges": [],
       "gaps": [
