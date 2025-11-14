@@ -332,6 +332,18 @@ def build_hypotheses(evidence_index: dict, company: str, time_window: str, max_p
     }
 
 
+# In-process callable used by run.py to avoid subprocess + disk I/O
+# Thin wrapper around build_hypotheses with a stable interface for the orchestrator.
+
+def run_step(*, evidence_index: dict, company: str, time_window: str, max_per_bucket: int = 3) -> dict:
+    return build_hypotheses(
+        evidence_index=evidence_index,
+        company=company,
+        time_window=time_window,
+        max_per_bucket=max_per_bucket,
+    )
+
+
 def render_markdown(payload: dict) -> str:
     lines = []
     lines.append(f"# Step 3: Evidenced Hypotheses for {payload.get('company','Unknown')}")
@@ -442,7 +454,7 @@ def main():
 
     company = args.company or evidence_index.get("company") or "Unknown"
 
-    payload = build_hypotheses(
+    payload = run_step(
         evidence_index=evidence_index,
         company=company,
         time_window=args.time_window,

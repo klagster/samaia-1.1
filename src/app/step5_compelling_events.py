@@ -354,6 +354,48 @@ def synthesize_events(
         "compelling_events": events_out
     }
 
+
+# ---------------------- In-process callable for orchestrator ----------------------
+
+def run_step(
+    *,
+    problems: List[dict] | None,
+    alignments: List[dict] | None,
+    extra_evidence: List[dict] | None,
+    strict: str = "medium",
+    max_sources: int = 3,
+    company: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Run Step 5 fully in-process.
+
+    Parameters mirror the synthesized inputs produced by prior steps when called
+    from run.py. This avoids subprocess + disk I/O while preserving output shape.
+    """
+    # Normalize extra evidence into a uniform dict shape (same as CLI path)
+    extra_norm: List[dict] = []
+    for d in (extra_evidence or []):
+        item = EvidenceItem.from_any(d)
+        if item:
+            extra_norm.append({
+                "source": item.source,
+                "url_or_id": item.url,
+                "date": item.date,
+                "quote_or_note": item.quote,
+            })
+
+    payload = synthesize_events(
+        step2_problems=problems or [],
+        step3_alignments=alignments or [],
+        extra_ev=extra_norm,
+        strict=strict,
+        max_sources=max_sources,
+    )
+
+    if company:
+        payload = {"company": company, **payload}
+
+    return payload
+
 # ---------------------- Markdown rendering ----------------------
 
 def render_markdown(company: str, payload: Dict[str, Any]) -> str:

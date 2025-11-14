@@ -1,0 +1,57 @@
+[
+  {
+    "title": "RingCentral, Inc. - SEC.gov",
+    "url": "https://www.sec.gov/edgar/browse/?CIK=1344981&owner=exclude",
+    "snippet": "",
+    "source": "vertex_search",
+    "query": "\"\"RingCentral\"\" site:sec.gov (8-K OR 10-K OR 10-Q OR \"current report\" OR \"earnings call\")",
+    "query_category": "\"\"RingCentral\"\" site:sec.gov (8-K OR 10-K OR 10-Q OR \"current report\" OR \"earnings call\")",
+    "company": "RingCentral",
+    "domain": "ringcentral.com",
+    "collected_at": "2025-11-12T22:12:09.152520Z"
+  },
+  {
+    "title": "RingCentral, Inc. - SEC.gov",
+    "url": "https://www.sec.gov/Archives/edgar/data/1344981/000134498124000074/RNG-20240331.htm",
+    "snippet": "",
+    "source": "vertex_search",
+    "query": "\"\"RingCentral\"\" site:sec.gov (8-K OR 10-K OR 10-Q OR \"current report\" OR \"earnings call\")",
+    "query_category": "\"\"RingCentral\"\" site:sec.gov (8-K OR 10-K OR 10-Q OR \"current report\" OR \"earnings call\")",
+    "company": "RingCentral",
+    "domain": "ringcentral.com",
+    "collected_at": "2025-11-12T22:12:09.152530Z"
+  },
+  {
+    "title": "RingCentral, Inc. - SEC.gov",
+    "url": "https://www.sec.gov/Archives/edgar/data/1344981/000134498124000053/rng-20231231.htm",
+    "snippet": "",
+    "source": "vertex_search",
+    "query": "\"\"RingCentral\"\" site:sec.gov (8-K OR 10-K OR 10-Q OR \"current report\" OR \"earnings call\")",
+    "query_category": "\"\"RingCentral\"\" site:sec.gov (8-K OR 10-K OR 10-Q OR \"current report\" OR \"earnings call\")",
+    "company": "RingCentral",
+    "domain": "ringcentral.com",
+    "collected_at": "2025-11-12T22:12:09.152533Z"
+  },
+  {
+    "title": "RingCentral Announces Pricing of $300 Million Convertible Senior Notes Offering",
+    "url": "https://ir.ringcentral.com/news/news-details/2020/RingCentral-Announces-Pricing-of-300-Million-Convertible-Senior-Notes-Offering/default.aspx",
+    "snippet": "",
+    "source": "vertex_search",
+    "query": "\"\"RingCentral\"\" (\"credit facility\" OR refinancing OR \"notes offering\" OR debt OR financing) (site:investors.ringcentral.com OR site:ir.ringcentral.com OR site:sec.gov)",
+    "query_category": "\"\"RingCentral\"\" (\"credit facility\" OR refinancing OR \"notes offering\" OR debt OR financing) (site:investors.ringcentral.com OR site:ir.ringcentral.com OR site:sec.gov)",
+    "company": "RingCentral",
+    "domain": "ringcentral.com",
+    "collected_at": "2025-11-12T22:12:11.952419Z"
+  },
+  {
+    "title": "RINGCENTRAL, INC. - FORM 8-K - October 29, 2020",
+    "url": "https://www.sec.gov/Archives/edgar/data/1344986/000134498620000071/rcng-20201029.htm",
+    "snippet": "",
+    "source": "vertex_search",
+    "query": "\"\"RingCentral\"\" (\"credit facility\" OR refinancing OR \"notes offering\" OR debt OR financing) (site:investors.ringcentral.com OR site:ir.ringcentral.com OR site:sec.gov)",
+    "query_category": "\"\"RingCentral\"\" (\"credit facility\" OR refinancing OR \"notes offering\" OR debt OR financing) (site:investors.ringcentral.com OR site:ir.ringcentral.com OR site:sec.gov)",
+    "company": "RingCentral",
+    "domain": "ringcentral.com",
+    "collected_at": "2025-11-12T22:12:11.952427Z"
+  }
+]

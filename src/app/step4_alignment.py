@@ -311,6 +311,30 @@ def align_issues_to_taxonomy(
     }
 
 # ----------------------------
+# In-process callable for orchestrator
+# ----------------------------
+
+def run_step(
+    *,
+    issues: dict,
+    taxonomy: dict,
+    top_k: int = 3,
+    company: Optional[str] = None,
+    time_window: Optional[str] = None,
+) -> dict:
+    """
+    Thin wrapper around align_issues_to_taxonomy() so run.py can call this
+    step in-process (no subprocess, no disk I/O). Preserves existing logic.
+    """
+    # Make a shallow copy to avoid mutating caller's object when overriding
+    issues_local = dict(issues or {})
+    if company:
+        issues_local["company"] = company
+    if time_window:
+        issues_local["time_window"] = time_window
+    return align_issues_to_taxonomy(issues_local, taxonomy, top_k=max(1, int(top_k or 1)))
+
+# ----------------------------
 # Markdown rendering (optional)
 # ----------------------------
 

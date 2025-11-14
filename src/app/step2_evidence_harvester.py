@@ -23,6 +23,7 @@ Optional:
 """
 
 from __future__ import annotations
+from typing import Any, Dict, List, Optional
 import argparse, json, hashlib, re
 from datetime import datetime, timezone
 from pathlib import Path
@@ -162,6 +163,35 @@ def _normalize(hit: dict) -> dict | None:
     "confidence": confidence,
   }
 
+# In-process callable used by run.py to avoid subprocess + disk I/O
+# Accepts raw events as a Python list and returns the normalized object
+# {"company": str, "generated_at": iso, "evidence": list}
+
+def run_step(*, company: str, raw_events: List[Dict[str, Any]]) -> Dict[str, Any]:
+  seen: set[str] = set()
+  out: List[Dict[str, Any]] = []
+  for e in (raw_events or []):
+    ne = _normalize(e)
+    if not ne:
+      continue
+    fid = ne.get("id")
+    if fid in seen:
+      continue
+    seen.add(fid)
+    out.append(ne)
+
+  # Sort: newest first, then confidence desc, then title
+  def _sort_key(rec: dict):
+    di = rec.get("date_iso")
+    try:
+      dt = datetime.fromisoformat((di or "").replace("Z", "+00:00"))
+    except Exception:
+      dt = datetime.fromtimestamp(0, tz=timezone.utc)
+    return (-int(dt.timestamp()), -int(rec.get("confidence", 0) * 100), rec.get("title","" ).lower())
+
+  out.sort(key=_sort_key)
+  return {"company": company, "generated_at": _now_utc_iso(), "evidence": out}
+
 def harvest(raw_events_path: str, out_json: str, out_ndjson: str | None = None, company: str | None = None) -> dict:
   events = _read_events_any(raw_events_path)
   seen: set[str] = set()
@@ -219,7 +249,19 @@ def main():
   if args.raw_events_ndjson:
     raw_path = args.raw_events_ndjson
 
-  obj = harvest(raw_path, out_json, args.out_ndjson or None, company=args.company)
+  # Read raw events and run in-process normalization
+  raw_events = _read_events_any(raw_path)
+  obj = run_step(company=args.company, raw_events=raw_events)
+
+  # Write JSON artifact
+  Path(out_json).parent.mkdir(parents=True, exist_ok=True)
+  Path(out_json).write_text(json.dumps(obj, indent=2), encoding="utf-8")
+
+  # Optional NDJSON of flat evidence records
+  if args.out_ndjson:
+    with Path(args.out_ndjson).open("w", encoding="utf-8") as fh:
+      for rec in obj.get("evidence", []) or []:
+        fh.write(json.dumps(rec) + "\n")
 
   print(f"[harvester] company={obj['company']} items={len(obj['evidence'])} -> {out_json}")
   if args.out_ndjson:

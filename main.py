@@ -141,7 +141,8 @@ def _post_webhook(url: str, payload: Dict[str, Any], *, event_type: str, run_id:
     return {"ok": False, "error": last_err, "delivery_id": delivery_id}
 
  # --- Helper to process a single target_account for a campaign ---
-async def _process_one_target_account(campaign_id: str, target_account_id: str, page_size: int) -> Dict[str, Any]:
+async def _process_one_target_account(campaign_id: str, target_account_id: str, page_size: int,
+                                      callback_url: str | None, webhook_secret: str | None) -> Dict[str, Any]:
     """Run the pipeline for one (campaign_id, target_account_id) pair and return a compact result dict.
     NOTE: This mirrors the previous single-account flow from http_handler."""
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -208,6 +209,10 @@ async def _process_one_target_account(campaign_id: str, target_account_id: str, 
 
             merged_payload.setdefault("mapping_insights", [])
             merged_payload.setdefault("campaign_challenges", [])
+
+            # Ensure IDs are embedded for the executor (run.py) and any downstream readers
+            merged_payload["campaign_id"] = campaign_id
+            merged_payload["target_account_id"] = target_account_id
 
             # Derive company meta strictly from target_account
             company_name = None
@@ -313,6 +318,21 @@ async def _process_one_target_account(campaign_id: str, target_account_id: str, 
             if rawevents_path:
                 sys.argv += ["--raw-events", rawevents_path]
 
+            # Ensure executor (run.py) knows IDs and where to report
+            sys.argv += ["--campaign-id", campaign_id, "--target-account-id", target_account_id]
+
+            # Propagate run-level identifier (RUN_ID) into run.py if present
+            run_id = os.environ.get("RUN_ID")
+            if run_id:
+                sys.argv += ["--run-id", run_id]
+
+            if callback_url:
+                sys.argv += ["--webhook-url", callback_url]
+            if webhook_secret:
+                sys.argv += ["--webhook-secret", webhook_secret]
+
+            logging.info("[GCF] Invoking run.py with campaign_id=%s target_account_id=%s", campaign_id, target_account_id)
+
             buf_out, buf_err = io.StringIO(), io.StringIO()
             stdout_tee = _LogTee(buf_out, level=logging.INFO, prefix="[RUN STDOUT] ")
             stderr_tee = _LogTee(buf_err, level=logging.WARNING, prefix="[RUN STDERR] ")
@@ -359,11 +379,24 @@ def http_handler(request: Request):
             return _resp({"ok": False, "error": "Unauthorized"}, 401)
 
     body = request.get_json(silent=True) or {}
-    callback_url = body.get("callback_url")
+    callback_url = body.get("callback_url") or os.getenv("CALLBACK_URL")
     webhook_secret = body.get("webhook_secret") or WEBHOOK_SECRET
-    run_id = str(uuid.uuid4())
+
     campaign_id = body.get("campaign_id")
-    target_account_id = body.get("target_account_id")  # optional for back-compat
+    target_account_id = body.get("target_account_id")
+
+    # Run-level identifier for this campaign run (one per fan-out job)
+    # ✅ NEW (must come from Cloud Task)
+    run_id = body.get("run_id")
+    if not run_id:
+        logging.error("[Processor] Missing run_id in Cloud Task payload")
+        return _resp(
+            {"ok": False, "error": "run_id is required in Cloud Task payload"},
+            400,
+        )
+
+    os.environ["RUN_ID"] = run_id
+    logging.info("[Processor] Using run_id from Cloud Task: %s", run_id)
 
     # Basic UUID validation helper
     def _is_uuid(x: str) -> bool:
@@ -376,6 +409,9 @@ def http_handler(request: Request):
     if not (campaign_id and _is_uuid(campaign_id)):
         return _resp({"ok": False, "error": "Provide campaign_id as a valid UUID."}, 400)
 
+    if not (target_account_id and _is_uuid(target_account_id)):
+        return _resp({"ok": False, "error": "Provide target_account_id as a valid UUID."}, 400)
+
     # page_size: default 5000, clamp to [1, 5000]
     try:
         page_size = int(body.get("page_size", 5000))
@@ -383,118 +419,28 @@ def http_handler(request: Request):
         return _resp({"ok": False, "error": "page_size must be an integer"}, 400)
     page_size = max(1, min(5000, page_size))
 
-    # If target_account_id provided, keep previous single-account behavior
-    if target_account_id:
-        if not _is_uuid(target_account_id):
-            return _resp({"ok": False, "error": "target_account_id must be a valid UUID if provided."}, 400)
-        # Run one
-        result = asyncio.run(_process_one_target_account(campaign_id, target_account_id, page_size))
-        status = 200 if result.get("ok") else 500
-        if callback_url:
-            try:
-                _post_webhook(
-                    callback_url,
-                    {
-                        "run_id": run_id,
-                        "campaign_id": campaign_id,
-                        "target_account_id": target_account_id,
-                        "status": "ok" if result.get("ok") else "failed",
-                        "rc": 0 if result.get("ok") else 1,
-                        "output_tail": result.get("output_tail"),
-                        "stderr_tail": result.get("stderr_tail"),
-                    },
-                    event_type="ta_progress",
-                    run_id=run_id,
-                    secret=webhook_secret,
-                )
-            except Exception:
-                logging.exception("[GCF] webhook progress callback failed (single-account)")
-        return _resp({"ok": bool(result.get("ok")), "campaign_id": campaign_id, "run_id": run_id, "results": [result]}, status)
-
-    # Otherwise: enumerate ALL target accounts for the campaign and run them all
     try:
-        try:
-            # New helper expected in supabase_source.py
-            from src.integrations.supabase_source import list_target_accounts_for_campaign
-        except Exception:
-            return _resp({
-                "ok": False,
-                "error": "Supabase source missing list_target_accounts_for_campaign(campaign_id, page_size). Please add it and redeploy.",
-            }, 500)
-
-        ta_rows = list_target_accounts_for_campaign(campaign_id, page_size=page_size)
-        if not isinstance(ta_rows, list):
-            return _resp({"ok": False, "error": "list_target_accounts_for_campaign returned non-list"}, 500)
-        if not ta_rows:
-            return _resp({"ok": True, "campaign_id": campaign_id, "results": [], "message": "No target accounts found for campaign."}, 200)
-
-        results: list[dict] = []
-        started = time.time()
-        ok_count = 0
-        fail_count = 0
-        # Run sequentially; could be parallelized later with asyncio.gather
-        for row in ta_rows:
-            ta_id = row.get("id") or row.get("target_account_id")
-            if not ta_id or not _is_uuid(ta_id):
-                logging.warning("[GCF] Skipping TA with missing/invalid id: %r", row)
-                continue
-            logging.info("[GCF] Processing target_account_id=%s", ta_id)
-            r = asyncio.run(_process_one_target_account(campaign_id, ta_id, page_size))
-            results.append(r)
-            if r.get("ok"):
-                ok_count += 1
-            else:
-                fail_count += 1
-            if callback_url:
-                try:
-                    _post_webhook(
-                        callback_url,
-                        {
-                            "run_id": run_id,
-                            "campaign_id": campaign_id,
-                            "target_account_id": ta_id,
-                            "status": "ok" if r.get("ok") else "failed",
-                            "rc": 0 if r.get("ok") else 1,
-                            "elapsed_ms": int((time.time() - started) * 1000),
-                            "output_tail": r.get("output_tail"),
-                            "stderr_tail": r.get("stderr_tail"),
-                        },
-                        event_type="ta_progress",
-                        run_id=run_id,
-                        secret=webhook_secret,
-                    )
-                except Exception:
-                    logging.exception("[GCF] webhook progress callback failed (multi-account)")
-
-        if callback_url:
-            try:
-                duration_ms = int((time.time() - started) * 1000)
-                _post_webhook(
-                    callback_url,
-                    {
-                        "run_id": run_id,
-                        "campaign_id": campaign_id,
-                        "summary": {
-                            "total": len(results),
-                            "ok": ok_count,
-                            "failed": fail_count,
-                            "duration_ms": duration_ms,
-                        },
-                        "results": [
-                            {"target_account_id": rr.get("target_account_id"), "status": "ok" if rr.get("ok") else "failed", "rc": 0 if rr.get("ok") else 1}
-                            for rr in results
-                        ],
-                    },
-                    event_type="ta_done",
-                    run_id=run_id,
-                    secret=webhook_secret,
-                )
-            except Exception:
-                logging.exception("[GCF] webhook final callback failed")
-
-        ok_all = all(rt.get("ok") for rt in results) if results else True
-        status = 200 if ok_all else 207  # 207 Multi-Status-like semantics via 200 with mixed ok
-        return _resp({"ok": ok_all, "campaign_id": campaign_id, "run_id": run_id, "results": results}, status)
+        # Process exactly one target account per request (Cloud Task → Processor)
+        result = asyncio.run(
+            _process_one_target_account(
+                campaign_id,
+                target_account_id,
+                page_size,
+                callback_url,
+                webhook_secret,
+            )
+        )
+        status = 200 if result.get("ok") else 500
+        return _resp(
+            {
+                "ok": bool(result.get("ok")),
+                "campaign_id": campaign_id,
+                "run_id": run_id,
+                "target_account_id": target_account_id,
+                "result": result,
+            },
+            status,
+        )
     except Exception as e:
-        logging.exception("[GCF] Error while iterating target accounts")
+        logging.exception("[GCF] Error while processing target account")
         return _resp({"ok": False, "error": f"{type(e).__name__}: {e}"}, 500)
