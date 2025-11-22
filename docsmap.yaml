@@ -1,139 +1,406 @@
 version: 1
+project: "samaia-1.1"
+description: >
+  Full SAMaiA 5-step GTM pipeline using Google ADK / google-genai, Supabase,
+  and Cloud Run / Cloud Functions. This map is used to ground ADK-aware agents
+  in the actual implementation and the official docs they must stay aligned to.
 
-# Global list of docs that are treated as "trusted" grounding sources
-trusted_grounding:
-  - /docs
-  - /examples
-  - /reference
-  - /concepts
-
+# High-level flows that we care about for grounding
 flows:
-  # Step 1 – Web evidence collection
-  web_evidence:
-    description: Collect web evidence and raw account signals for a single target account.
-    tool: step1_evidence_grabber
-    entrypoint: src/app/step1_evidence_grabber.py
-    inputs:
-      - company
-      - company_url
-      - domain
-      - campaign_config.ta_step1_temperature
-      - campaign_config.ta_step1_max_output_tokens
-      - campaign_config.ta_step1_external_provisioned_qpm
-      - campaign_config.ta_step1_external_safety_margin
-      - campaign_config.ta_step1_external_concurrency
-    outputs:
-      - step1_web_evidence.json
-      - target_accounts.step1_web_evidence (Supabase column)
+  - id: web_evidence
+    name: "Step 1–2: Web Evidence Collection & Normalization"
+    description: >
+      Collect grounded web events for a target account (via Vertex search)
+      and normalize them into an evidence index usable by downstream steps.
+    entrypoints:
+      - id: step1
+        kind: python-function
+        module: src.app.step1_evidence_grabber
+        function: run_step
+        description: >
+          Async evidence grabber. Calls app.collectors.web_search_single.execute_vertex_search_from_pack
+          using configs/web_queries.combined.json to collect web events.
+        adk_docs:
+          - "/get-started/quickstart"
+          - "/api-reference/tools"
+          - "/concepts/sessions"
+        trusted_docs:
+          - "adk_core"
+          - "genai_client"
+      - id: step1_cli
+        kind: cli
+        module: src.app.step1_evidence_grabber
+        function: main
+        description: >
+          CLI wrapper for Step 1. Used by run.py as a subprocess fallback.
+        adk_docs:
+          - "/get-started/quickstart"
+      - id: step2
+        kind: python-function
+        module: src.app.step2_evidence_harvester
+        function: run_step
+        description: >
+          Normalizes raw web hits into a de-duplicated, scored evidence index:
+          {"company","generated_at","evidence":[...]}.
+        adk_docs:
+          - "/get-started/quickstart"
+        trusted_docs:
+          - "adk_core"
+      - id: step2_cli
+        kind: cli
+        module: src.app.step2_evidence_harvester
+        function: main
+        description: >
+          CLI wrapper for Step 2. Accepts raw Step 1 output, writes evidence JSON/NDJSON.
+    data_shapes:
+      inputs:
+        - id: raw_web_events
+          from: "app.collectors.web_search_single.execute_vertex_search_from_pack"
+          shape: "List[Dict] web hits"
+      outputs:
+        - id: evidence_index
+          path_pattern: ".outputs/step2_problems.json or .outputs/*evidence*.json"
+          shape: >
+            {"company": str, "generated_at": iso8601, "evidence": [ {title,url,date_iso,snippet,category,publisher,confidence,...} ]}
+
+  - id: hypotheses
+    name: "Step 3: Hypotheses Generator"
+    description: >
+      Takes normalized evidence and generates evidenced business problems
+      (hypotheses) in the SAMaiA 'problems' schema.
+    entrypoints:
+      - id: step3
+        kind: python-function
+        module: src.app.step3_hypotheses_generator
+        function: run_step
+        description: >
+          LLM-based hypotheses generator using google-genai (Gemini).
+          Accepts evidence_index, returns {"company","time_window","problems":[...]}.
+          Includes retry logic for 429 rate limits via tenacity.
+        adk_docs:
+          - "/get-started/quickstart"
+          - "/api-reference/tools"
+          - "/concepts/sessions"
+        trusted_docs:
+          - "genai_client"
+      - id: step3_cli
+        kind: cli
+        module: src.app.step3_hypotheses_generator
+        function: main
+        description: >
+          CLI wrapper for Step 3 for subprocess-based execution from run.py.
+    data_shapes:
+      inputs:
+        - id: evidence_index
+          from: "step2_evidence_harvester.run_step"
+      outputs:
+        - id: problems
+          path_pattern: ".outputs/step3_hypotheses.json"
+          shape: >
+            {"company": str, "time_window": str,
+             "problems": [ {id, issue_id, title, why_it_matters, category, evidence: [...]} ]}
+
+  - id: alignments
+    name: "Step 4: Issue–Challenge Alignment"
+    description: >
+      Deterministic alignment of issues (problems) to campaign taxonomy
+      challenges. No LLM calls; fully deterministic.
+    entrypoints:
+      - id: step4
+        kind: python-function
+        module: src.app.step4_alignment
+        function: align_issues_to_taxonomy
+        description: >
+          Core alignment logic. Given hypotheses and campaign_challenges taxonomy,
+          produces aligned_challenges and gaps for each issue.
+        adk_docs:
+          - "/get-started/quickstart"
+        trusted_docs:
+          - "adk_core"
+      - id: step4_cli
+        kind: cli
+        module: src.app.step4_alignment
+        function: main
+        description: >
+          CLI wrapper used by run.py. Emits orchestrator markers:
+          __STEP4_JSON_PATH__, __STEP4_ALIGN_COUNT__.
+    data_shapes:
+      inputs:
+        - id: problems
+          from: "step3_hypotheses_generator.run_step"
+        - id: campaign_challenges
+          from: "Supabase needs_analysis_output (customer_challenges / data_signal_mapping)"
+      outputs:
+        - id: alignments
+          path_pattern: ".outputs/step4_alignments.json"
+          shape: >
+            {"company": str, "generated_at": iso8601,
+             "alignments": [ {issue_title, issue_category,
+                              aligned_challenges: [ {challenge_group,challenge,rationale,alignment_strength} ],
+                              gaps: [str],
+                              evidence_stats?: {...}} ]}
+
+  - id: compelling_events
+    name: "Step 5: Compelling Events Generator"
+    description: >
+      Uses problems + alignments (+ optional raw evidence) to synthesize
+      stakeholder-specific compelling events with evidence-backed confidence.
+    entrypoints:
+      - id: step5
+        kind: python-function
+        module: src.app.step5_compelling_events
+        function: run_step
+        description: >
+          Main Step 5 in-process function. Builds final compelling_events payload,
+          including evidence_stats and confidence scores.
+        adk_docs:
+          - "/get-started/quickstart"
+          - "/api-reference/tools"
+        trusted_docs:
+          - "genai_client"
+      - id: step5_llm
+        kind: python-function
+        module: src.app.step5_compelling_events
+        function: _llm_generate_compelling_events
+        description: >
+          Low-level Gemini call that proposes compelling_events JSON.
+          Wrapped with tenacity for 429 handling and robust JSON salvage.
+      - id: step5_cli
+        kind: cli
+        module: src.app.step5_compelling_events
+        function: main
+        description: >
+          CLI wrapper used by run.py as a fallback when in-process execution fails.
+    data_shapes:
+      inputs:
+        - id: problems
+          from: "step3_hypotheses_generator.run_step"
+        - id: alignments
+          from: "step4_alignment.align_issues_to_taxonomy"
+        - id: raw_evidence_optional
+          from: "step1_evidence_grabber.run_step"
+      outputs:
+        - id: compelling_events
+          path_pattern: ".outputs/step5_compelling_events.json"
+          shape: >
+            {"step": "compelling_events", "company_name": str, "generated_at": iso8601,
+             "compelling_events": [ {issue_title, stakeholder, event_message,
+                                     risk_if_ignored, urgency_trigger,
+                                     opportunity_if_addressed, aligned_challenges,
+                                     sources, evidence_stats, confidence} ]}
+
+  - id: orchestration
+    name: "Orchestrator & Session Wiring"
+    description: >
+      Session-aware orchestrator that ties Steps 1–5 together, applies campaign-
+      level overrides from Supabase, persists per-target-account output, and
+      notifies Supabase via webhook.
+    entrypoints:
+      - id: run_orchestrator
+        kind: python-async
+        module: src.app.run
+        function: main
+        description: >
+          Core async orchestrator. Uses InMemorySessionService and Event / EventActions
+          from google.adk.sessions/events to maintain session context, handle
+          event streaming, and call steps in-process when available.
+        adk_docs:
+          - "/get-started/quickstart"
+          - "/concepts/sessions"
+          - "/api-reference/tools"
+        trusted_docs:
+          - "adk_core"
+          - "genai_client"
+      - id: gcf_handler
+        kind: python-function
+        module: src.app.main
+        function: main
+        description: >
+          Cloud Function / Cloud Run entrypoint. Pulls campaign + target_account
+          from Supabase, hydrates mapping_insights & campaign_challenges from
+          needs_analysis_output, then invokes run.py with appropriate IDs and env.
+    data_shapes:
+      inputs:
+        - id: campaign_row
+          from: "Supabase campaigns"
+        - id: target_account_row
+          from: "Supabase target_accounts"
+        - id: needs_analysis_output
+          from: "Supabase needs_analysis_output (client_profile, customer_challenges, data_signal_mapping, data_acquisition)"
+      outputs:
+        - id: target_account_enriched
+          destination: "Supabase target_accounts.<step*_json columns>"
+        - id: webhook_status
+          destination: "Supabase Edge Function at CALLBACK_URL"
+
+# -------------------------------------------------------------------
+# ADK / GenAI docs and grounding declarations
+# -------------------------------------------------------------------
+trusted_docs:
+  - id: adk_core
+    label: "ADK Core"
+    urls:
+      - "/"
+      - "/get-started/quickstart"
+      - "/concepts/sessions"
+      - "/api-reference/tools"
+  - id: genai_client
+    label: "google-genai Client / Vertex integration"
+    urls:
+      - "/integrations/vertexai"
+      - "/api-reference/client"
+  - id: project_docs
+    label: "Project Local Docs"
+    paths:
+      - "README.md"
+      - "docs/"
+      - "examples/"
+      - "reference/"
+
+# -------------------------------------------------------------------
+# Tool / function registry (for agents that reason over code layout)
+# -------------------------------------------------------------------
+tools:
+  step1_evidence_grabber:
+    module: src.app.step1_evidence_grabber
+    entrypoints:
+      - run_step
+      - main
+    flow: web_evidence
+  step2_evidence_harvester:
+    module: src.app.step2_evidence_harvester
+    entrypoints:
+      - run_step
+      - main
+    flow: web_evidence
+  step3_hypotheses_generator:
+    module: src.app.step3_hypotheses_generator
+    entrypoints:
+      - run_step
+      - main
+      - _llm_generate_hypotheses
+    flow: hypotheses
+  step4_alignment:
+    module: src.app.step4_alignment
+    entrypoints:
+      - align_issues_to_taxonomy
+      - main
+    flow: alignments
+  step5_compelling_events:
+    module: src.app.step5_compelling_events
+    entrypoints:
+      - run_step
+      - main
+      - _llm_generate_compelling_events
+    flow: compelling_events
+  orchestrator_run:
+    module: src.app.run
+    entrypoints:
+      - main
+    flow: orchestration
+  gcf_entry_main:
+    module: src.app.main
+    entrypoints:
+      - main
+    flow: orchestration
+
+# -------------------------------------------------------------------
+# Environment-sourced tuning knobs surfaced via Supabase campaigns
+# -------------------------------------------------------------------
+tuning:
+  ta_step1:
+    env_prefix: "TA_STEP1_"
+    description: "Web evidence collection tuning (Vertex search collector)."
+    backed_by_campaign_columns:
+      - ta_step1_temperature
+      - ta_step1_max_output_tokens
+      - ta_step1_external_provisioned_qpm
+      - ta_step1_external_safety_margin
+      - ta_step1_external_concurrency
+  ta_step2:
+    env_prefix: "TA_STEP2_"
+    description: "Evidence harvester LLM (if/when added)."
+    backed_by_campaign_columns:
+      - ta_step2_temperature
+      - ta_step2_max_output_tokens
+  ta_step3:
+    env_prefix: "TA_STEP3_"
+    description: "Hypotheses generator LLM configuration."
+    backed_by_campaign_columns:
+      - ta_step3_temperature
+      - ta_step3_max_output_tokens
+  ta_step4:
+    env_prefix: "TA_STEP4_"
+    description: "Alignment step (currently deterministic, no LLM)."
+    backed_by_campaign_columns:
+      - ta_step4_temperature
+      - ta_step4_max_output_tokens
+  ta_step5:
+    env_prefix: "TA_STEP5_"
+    description: "Compelling events LLM configuration."
+    backed_by_campaign_columns:
+      - ta_step5_temperature
+      - ta_step5_max_output_tokens
+
+# -------------------------------------------------------------------
+# External integration points (Supabase, webhooks, Vertex)
+# -------------------------------------------------------------------
+external_integrations:
+  supabase:
+    description: "Source-of-truth for campaigns, target_accounts, and needs_analysis_output."
     env:
-      - WEB_QUERY_PACK
-      - WEB_MAX_RESULTS
-      - TA_STEP1_TEMPERATURE
-      - TA_STEP1_MAX_OUTPUT_TOKENS
-      - TA_STEP1_EXTERNAL_PROVISIONED_QPM
-      - TA_STEP1_EXTERNAL_SAFETY_MARGIN
-      - TA_STEP1_EXTERNAL_CONCURRENCY
-    adk_docs:
-      - /get-started/quickstart
-      - /api-reference/tools
-      - /api-reference/tools/web-search
-
-  # Step 2 – Evidence harvester / problem index
-  evidence_harvester:
-    description: Cluster and normalize raw web events into an evidence index of problems and themes.
-    tool: step2_evidence_harvester
-    entrypoint: src/app/step2_evidence_harvester.py
-    inputs:
-      - step1_web_evidence.json
-      - company
-    outputs:
-      - step2_problems.json
-      - target_accounts.step2_problems
-    adk_docs:
-      - /get-started/quickstart
-      - /api-reference/tools
-      - /api-reference/models
-
-  # Step 3 – Hypothesis generation
-  hypotheses:
-    description: Generate problem and opportunity hypotheses from web evidence and campaign context.
-    tool: step3_hypotheses
-    entrypoint: src/app/step3_hypotheses_generator.py
-    inputs:
-      - step2_problems.json
-      - company
-      - time_window
-      - campaign_config.ta_step3_temperature
-      - campaign_config.ta_step3_max_output_tokens
-    outputs:
-      - step3_hypotheses.json
-      - target_accounts.step3_hypotheses
+      - SUPABASE_URL
+      - SUPABASE_SERVICE_KEY
+      - SUPABASE_SCHEMA
+    tables:
+      - campaigns
+      - target_accounts
+      - needs_analysis_output
+    writers:
+      - module: src.app.run
+        function: _sb_patch_target_account
+        columns_written:
+          - step1_web_evidence
+          - step2_problems
+          - step3_hypotheses
+          - step4_alignments
+          - step5_compelling_events
+          - analysis_updated_at
+  webhook:
+    description: "Status callback when a run completes or updates."
     env:
-      - TA_STEP3_TEMPERATURE
-      - TA_STEP3_MAX_OUTPUT_TOKENS
-    adk_docs:
-      - /get-started/quickstart
-      - /api-reference/tools
-      - /api-reference/models
-
-  # Step 4 – Alignment to campaign challenges
-  alignments:
-    description: Align account-specific issues to the campaign challenge taxonomy.
-    tool: step4_alignment
-    entrypoint: src/app/step4_alignment.py
-    inputs:
-      - step3_hypotheses.json
-      - campaign_challenges.json
-      - company
-      - time_window
-    outputs:
-      - step4_alignments.json
-      - target_accounts.step4_alignments
-    adk_docs:
-      - /get-started/quickstart
-      - /api-reference/tools
-      - /concepts/alignments
-
-  # Step 5 – Compelling events
-  compelling_events:
-    description: Turn aligned issues into outbound-ready compelling events for this account.
-    tool: step5_compelling_events
-    entrypoint: src/app/step5_compelling_events.py
-    inputs:
-      - step1_web_evidence.json
-      - step2_problems.json
-      - step4_alignments.json
-      - company
-      - campaign_config.evidence_strictness
-      - campaign_config.ta_step5_temperature
-      - campaign_config.ta_step5_max_output_tokens
-    outputs:
-      - step5_compelling_events.json
-      - target_accounts.step5_compelling_events
+      - CALLBACK_URL
+      - WEBHOOK_SECRET
+    module: src.app.run
+    functions:
+      - _post_webhook
+  vertex_genai:
+    description: "Gemini / Vertex integration via google-genai."
     env:
-      - STEP5_STRICT
-      - TA_STEP5_TEMPERATURE
-      - TA_STEP5_MAX_OUTPUT_TOKENS
-    adk_docs:
-      - /get-started/quickstart
-      - /api-reference/tools
-      - /concepts/compelling-events
+      - GOOGLE_CLOUD_PROJECT
+      - GOOGLE_CLOUD_LOCATION
+      - GOOGLE_GENAI_USE_VERTEXAI
+      - VERTEX_PROJECT
+      - VERTEX_LOCATION
+    modules:
+      - src.app.step1_evidence_grabber
+      - src.app.step3_hypotheses_generator
+      - src.app.step5_compelling_events
 
-orchestrator:
-  description: Session-aware pipeline runner that orchestrates steps 1–5 and writes outputs to Supabase.
-  entrypoint: src/app/run.py
-  uses_flows:
-    - web_evidence
-    - evidence_harvester
-    - hypotheses
-    - alignments
-    - compelling_events
-  datasets:
-    - campaigns
-    - target_accounts
-    - needs_analysis_output
-  adk_docs:
-    - /get-started/quickstart
-    - /concepts/sessions
-    - /api-reference/events
-    - /api-reference/tools
+# -------------------------------------------------------------------
+# Observability / markers for the orchestrator
+# -------------------------------------------------------------------
+observability:
+  markers:
+    - "__STEP4_JSON_PATH__"
+    - "__STEP4_ALIGN_COUNT__"
+    - "__STEP5_JSON_PATH__"
+  log_patterns:
+    - "[collector]"
+    - "[step1]"
+    - "[step2]"
+    - "[step3]"
+    - "[Step 4]"
+    - "[step5]"
+    - "[orchestrator]"
+    - "[save->supabase]"
