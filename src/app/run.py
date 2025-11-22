@@ -14,7 +14,7 @@ Optional:
 from __future__ import annotations
 
 import argparse
-from src.utils import fastjson as json
+import json
 import os
 import shlex
 import subprocess
@@ -24,6 +24,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Tuple, Optional
 import hmac, hashlib, uuid
 import logging
+import asyncio # [NEW] Added for async operations
 
 # Ensure INFO-level logs from redirected stdout are emitted
 logging.basicConfig(
@@ -304,20 +305,24 @@ def _extract_ids_from_inputs(inputs: Dict[str, Any]) -> Tuple[Optional[str], Opt
         tid = ta.get("id") or ta.get("target_account_id")
     return cid, tid
 
-def _run(cmd: List[str], cwd: Optional[str] = None, extra_env: Optional[Dict[str, str]] = None) -> int:
-    """Execute a command with proper error handling."""
-    env = os.environ.copy()
-    if extra_env:
-        env.update(extra_env)
-    clean_cmd = []
-    for arg in cmd:
-        if arg is None:
-            _print(f"[ERROR] Command contains None value: {cmd}")
-            raise ValueError(f"Command argument cannot be None: {cmd}")
-        clean_cmd.append(str(arg))
-    _print(f"[orchestrator] exec: {' '.join(shlex.quote(c) for c in clean_cmd)}")
-    proc = subprocess.Popen(clean_cmd, cwd=cwd, env=env)
-    return proc.wait()
+# [MODIFIED] Use asyncio.to_thread for synchronous subprocess call
+async def _run_blocking(cmd: List[str], cwd: Optional[str] = None, extra_env: Optional[Dict[str, str]] = None) -> int:
+    """Execute a command in a separate thread to prevent blocking the event loop."""
+    def _sync_run():
+        env = os.environ.copy()
+        if extra_env:
+            env.update(extra_env)
+        clean_cmd = []
+        for arg in cmd:
+            if arg is None:
+                _print(f"[ERROR] Command contains None value: {cmd}")
+                raise ValueError(f"Command argument cannot be None: {cmd}")
+            clean_cmd.append(str(arg))
+        _print(f"[orchestrator] exec: {' '.join(shlex.quote(c) for c in clean_cmd)}")
+        proc = subprocess.Popen(clean_cmd, cwd=cwd, env=env)
+        return proc.wait()
+
+    return await asyncio.to_thread(_sync_run)
 
 async def _append_event(session_service: InMemorySessionService, session: Session, name: str, text: str, delta: Dict[str, Any]) -> None:
     parts = [Part.from_text(text=text)]
@@ -371,6 +376,64 @@ async def main() -> None:
     inputs_raw = _load_json(args.inputs, default={}) or {}
     inputs = _normalize_inputs(inputs_raw)
 
+    # --- Promote campaign-level configuration into env + inputs blob ---
+    campaign_cfg = None
+    try:
+        # Prefer an explicit campaign_config blob if present (set by main.py)
+        campaign_cfg = inputs.get("campaign_config")
+        if not isinstance(campaign_cfg, dict):
+            # Fallback: derive from embedded campaign record
+            camp_rows = inputs.get("campaign") or []
+            if isinstance(camp_rows, list) and camp_rows:
+                camp0 = camp_rows[0] or {}
+                settings_obj = camp0.get("settings") if isinstance(camp0.get("settings"), dict) else None
+                campaign_cfg = settings_obj or camp0
+
+        if isinstance(campaign_cfg, dict):
+            # Map known JSON keys into env vars used by downstream steps
+            key_mapping = [
+                # Generic / web config
+                ("web_query_pack", "WEB_QUERY_PACK"),
+                ("web_max_results", "WEB_MAX_RESULTS"),
+                ("evidence_strictness", "STEP5_STRICT"),
+
+                # Target Account (TA) per-step model settings
+                ("ta_step1_temperature", "TA_STEP1_TEMPERATURE"),
+                ("ta_step1_max_output_tokens", "TA_STEP1_MAX_OUTPUT_TOKENS"),
+                ("ta_step1_external_provisioned_qpm", "TA_STEP1_EXTERNAL_PROVISIONED_QPM"),
+                ("ta_step1_external_safety_margin", "TA_STEP1_EXTERNAL_SAFETY_MARGIN"),
+                ("ta_step1_external_concurrency", "TA_STEP1_EXTERNAL_CONCURRENCY"),
+
+                ("ta_step2_temperature", "TA_STEP2_TEMPERATURE"),
+                ("ta_step2_max_output_tokens", "TA_STEP2_MAX_OUTPUT_TOKENS"),
+
+                ("ta_step3_temperature", "TA_STEP3_TEMPERATURE"),
+                ("ta_step3_max_output_tokens", "TA_STEP3_MAX_OUTPUT_TOKENS"),
+
+                ("ta_step4_temperature", "TA_STEP4_TEMPERATURE"),
+                ("ta_step4_max_output_tokens", "TA_STEP4_MAX_OUTPUT_TOKENS"),
+
+                ("ta_step5_temperature", "TA_STEP5_TEMPERATURE"),
+                ("ta_step5_max_output_tokens", "TA_STEP5_MAX_OUTPUT_TOKENS"),
+
+            ]
+            for json_key, env_name in key_mapping:
+                val = campaign_cfg.get(json_key)
+                # Only set if there is a value and the env var is not already set
+                if val not in (None, ""):
+                    os.environ[env_name] = str(val)
+                    logging.info(
+                        "[orchestrator] Overriding env: %s=%r (from %s)",
+                        env_name,
+                        val,
+                        json_key,
+                    )
+                logging.info("[orchestrator] %s=%s", env_name, os.environ.get(env_name))
+            # Keep a normalized view on the inputs blob for any step that wants it
+            inputs["campaign_config"] = campaign_cfg
+    except Exception:
+        logging.exception("[orchestrator] Failed to promote campaign config from inputs")
+
     # For persistence: pull IDs once
     campaign_id, target_account_id = _extract_ids_from_inputs(inputs)
 
@@ -380,6 +443,11 @@ async def main() -> None:
     if args.target_account_id:
         target_account_id = args.target_account_id
     _print(f"[orchestrator] IDs: campaign_id={campaign_id}, target_account_id={target_account_id}")
+    # Expose IDs to downstream components (collectors, etc.) via env for consistent logging context
+    if campaign_id:
+        os.environ["CAMPAIGN_ID"] = str(campaign_id)
+    if target_account_id:
+        os.environ["TARGET_ACCOUNT_ID"] = str(target_account_id)
 
     company, company_url, domain = _coalesce_company_context(inputs)
     if not isinstance(inputs, dict):
@@ -415,6 +483,10 @@ async def main() -> None:
             "company_url": company_url,
             "domain": domain,
             "time_window": inputs.get("time_window", os.getenv("TIME_WINDOW", "last 12–18 months")),
+            "campaign_id": campaign_id,
+            "target_account_id": target_account_id,
+            "run_id": job_id,
+            "campaign_config": inputs.get("campaign_config"),
         },
     )
     await _append_event(session_service, session, "session_started", f"Session started for {company}", {"status": "started"})
@@ -428,17 +500,21 @@ async def main() -> None:
     py = sys.executable or "python"
     query_pack = os.getenv("WEB_QUERY_PACK", "configs/web_queries.generic.json")
 
-    # ---- Step 1: Web Evidence Grabber
+    # ----------------------------------------------------------------------------------
+    # ---- Step 1: Web Evidence Grabber (ASYNCHRONOUS CALL)
+    # ----------------------------------------------------------------------------------
     step1_json = out_dir / "step1_web_evidence.json"
     web_evidence: list = []
     used_inproc_step1 = False
+    
+    # [CRITICAL FIX] Use await on the run_step function
     if HAS_STEP1:
         try:
-            web_evidence = step1.run_step(
+            web_evidence = await step1.run_step( # <-- AWAIT HERE
                 company=company,
                 company_url=company_url,
                 domain=domain,
-                max_results=int(os.getenv("WEB_MAX_RESULTS", "25")),
+                max_results=int(os.getenv("WEB_MAX_RESULTS", "250")),
             ) or []
             # Keep artifact parity for downstream tools/fallbacks
             if KEEP_JSON:
@@ -456,11 +532,14 @@ async def main() -> None:
                 "--company", company,
                 "--company-url", company_url or "",
                 "--out-json", str(step1_json),
-                "--max-results", os.getenv("WEB_MAX_RESULTS", "25"),
+                "--max-results", os.getenv("WEB_MAX_RESULTS", "500"),
             ]
             if domain:
                 cmd.extend(["--domain", domain])
-            rc = _run(cmd, extra_env=child_env)
+            
+            # [IMPROVEMENT] Run subprocess in a thread
+            rc = await _run_blocking(cmd, extra_env=child_env) 
+            
             if rc != 0:
                 _print(f"[warn] Step 1 exited with {rc}")
             web_evidence = _load_json(step1_json, default=[]) or []
@@ -476,13 +555,18 @@ async def main() -> None:
         {"step1_count": len(web_evidence) if isinstance(web_evidence, list) else 0},
     )
     _save_step_json(target_account_id, "step1_web_evidence", web_evidence)
+    # Persist Step 1 output into ADK session state
+    session.state["step1:web_evidence"] = web_evidence
 
-    # ---- Step 2: Evidence Harvester
+    # ----------------------------------------------------------------------------------
+    # ---- Step 2: Evidence Harvester (SYNCHRONOUS CALL)
+    # ----------------------------------------------------------------------------------
     step2_json = out_dir / "step2_problems.json"
     step2_md   = out_dir / "step2_problems.md"
     problems: dict = {}
     if HAS_STEP2:
         try:
+            # Step 2 remains synchronous, so no await needed here
             problems = step2.run_step(company=company, raw_events=web_evidence) or {}
             if KEEP_JSON:
                 _save_json(step2_json, problems)
@@ -495,16 +579,15 @@ async def main() -> None:
             if KEEP_JSON:
                 _save_json(step1_json, web_evidence)
         if Path("src/app/step2_evidence_harvester.py").exists():
-            rc = _run(
-                [
-                    py, "src/app/step2_evidence_harvester.py",
-                    "--company", company,
-                    "--raw-events", str(step1_json),
-                    "--out-json", str(step2_json),
-                    "--session-dir", str(out_dir),
-                ],
-                extra_env=child_env,
-            )
+            cmd = [
+                py, "src/app/step2_evidence_harvester.py",
+                "--company", company,
+                "--raw-events", str(step1_json),
+                "--out-json", str(step2_json),
+                "--session-dir", str(out_dir),
+            ]
+            # [IMPROVEMENT] Run subprocess in a thread
+            rc = await _run_blocking(cmd, extra_env=child_env)
             if rc != 0:
                 _print(f"[warn] Step 2 exited with {rc}")
             problems = _load_json(step2_json, default={}) or {}
@@ -519,15 +602,19 @@ async def main() -> None:
         {"step2_problem_count": len(problems.get("problems", [])) if isinstance(problems, dict) else 0},
     )
     _save_step_json(target_account_id, "step2_problems", problems)
+    # Persist Step 2 output into ADK session state
+    session.state["step2:problems"] = problems
 
-    # ---- Step 3: Hypotheses Generator
+    # ----------------------------------------------------------------------------------
+    # ---- Step 3: Hypotheses Generator (SYNCHRONOUS CALL)
+    # ----------------------------------------------------------------------------------
     step3_json = out_dir / "step3_hypotheses.json"
     step3_md   = out_dir / "step3_hypotheses.md"
     hypotheses: dict = {}
     time_window_val = inputs.get("time_window", "last 12-18 months")
     if HAS_STEP3:
         try:
-            # Step 3 expects the Step 2 structure (evidence index)
+            # Step 3 remains synchronous, so no await needed here
             evidence_index = problems
             hypotheses = step3.run_step(
                 evidence_index=evidence_index,
@@ -556,7 +643,10 @@ async def main() -> None:
             ]
             if KEEP_MD:
                 cmd3.extend(["--out-md", str(step3_md)])
-            rc = _run(cmd3, extra_env=child_env)
+            
+            # [IMPROVEMENT] Run subprocess in a thread
+            rc = await _run_blocking(cmd3, extra_env=child_env)
+            
             if rc != 0:
                 _print(f"[warn] Step 3 exited with {rc}")
             hypotheses = _load_json(step3_json, default={}) or {}
@@ -571,8 +661,12 @@ async def main() -> None:
         {"step3_issue_count": len(hypotheses.get("issues", [])) if isinstance(hypotheses, dict) else 0},
     )
     _save_step_json(target_account_id, "step3_hypotheses", hypotheses)
+    # Persist Step 3 output into ADK session state
+    session.state["step3:hypotheses"] = hypotheses
 
-    # ---- Step 4: Alignment
+    # ----------------------------------------------------------------------------------
+    # ---- Step 4: Alignment (SYNCHRONOUS CALL)
+    # ----------------------------------------------------------------------------------
     step4_json = out_dir / "step4_alignments.json"
     step4_md   = out_dir / "step4_alignments.md"
     taxonomy_path = args.campaign_challenges if args.campaign_challenges else None
@@ -580,6 +674,7 @@ async def main() -> None:
 
     if HAS_STEP4 and (hypotheses or {}).get("issues"):
         try:
+            # Step 4 remains synchronous, so no await needed here
             taxonomy_obj = _load_json(taxonomy_path, default={}) if taxonomy_path else {}
             alignments = step4.run_step(
                 issues=hypotheses,
@@ -611,7 +706,10 @@ async def main() -> None:
         if taxonomy_path:
             cmd4.extend(["--taxonomy", taxonomy_path])
         if Path("src/app/step4_alignment.py").exists():
-            rc = _run(cmd4, extra_env=child_env)
+            
+            # [IMPROVEMENT] Run subprocess in a thread
+            rc = await _run_blocking(cmd4, extra_env=child_env)
+            
             if rc != 0:
                 _print(f"[warn] Step 4 exited with {rc}")
             alignments = _load_json(step4_json, default={}) or {}
@@ -626,14 +724,19 @@ async def main() -> None:
         {"step4_alignment_count": len(alignments.get("alignments", [])) if isinstance(alignments, dict) else 0},
     )
     _save_step_json(target_account_id, "step4_alignments", alignments)
+    # Persist Step 4 output into ADK session state
+    session.state["step4:alignments"] = alignments
 
-    # ---- Step 5: Compelling Events
+    # ----------------------------------------------------------------------------------
+    # ---- Step 5: Compelling Events (SYNCHRONOUS CALL)
+    # ----------------------------------------------------------------------------------
     step5_json = out_dir / "step5_compelling_events.json"
     step5_md   = out_dir / "step5_compelling_events.md"
     events: dict = {}
     strict_level = os.getenv("STEP5_STRICT", "medium")
     if HAS_STEP5:
         try:
+            # Step 5 remains synchronous, so no await needed here
             problems_list = problems.get("problems", []) if isinstance(problems, dict) else []
             align_list = alignments.get("alignments", []) if isinstance(alignments, dict) else []
             events = step5.run_step(
@@ -672,7 +775,10 @@ async def main() -> None:
             ]
             if KEEP_MD:
                 cmd5.extend(["--out-md", str(step5_md)])
-            rc = _run(cmd5, extra_env=child_env)
+            
+            # [IMPROVEMENT] Run subprocess in a thread
+            rc = await _run_blocking(cmd5, extra_env=child_env)
+            
             if rc != 0:
                 _print(f"[warn] Step 5 exited with {rc}")
             events = _load_json(step5_json, default={}) or {}
@@ -687,6 +793,8 @@ async def main() -> None:
         {"step5_event_count": len(events.get("compelling_events", [])) if isinstance(events, dict) else 0},
     )
     _save_step_json(target_account_id, "step5_compelling_events", events)
+    # Persist Step 5 output into ADK session state
+    session.state["step5:compelling_events"] = events
 
     # ---- Final summary (stdout + ADK event)
     summary = {
@@ -704,14 +812,15 @@ async def main() -> None:
         step2_obj = _load_json(step2_json, default={}) or {}
         step3_obj = _load_json(step3_json, default={}) or {}
         step4_obj = _load_json(step4_json, default={}) or {}
-        print("__STEP2_JSON__:" + json.dumps(step2_obj, separators=(",", ":")))
-        print("__STEP3_JSON__:" + json.dumps(step3_obj, separators=(",", ":")))
-        print("__STEP4_JSON__:" + json.dumps(step4_obj, separators=(",", ":")))
-        print("__PIPELINE_JSON__:" + json.dumps({
-            "step2_json": step2_obj,
-            "step3_json": step3_obj,
-            "step4_json": step4_obj
-        }, separators=(",", ":")))
+        # Commented out original print lines for machine tails
+        # print("__STEP2_JSON__:" + json.dumps(step2_obj, separators=(",", ":")))
+        # print("__STEP3_JSON__:" + json.dumps(step3_obj, separators=(",", ":")))
+        # print("__STEP4_JSON__:" + json.dumps(step4_obj, separators=(",", ":")))
+        # print("__PIPELINE_JSON__:" + json.dumps({
+        #     "step2_json": step2_obj,
+        #     "step3_json": step3_obj,
+        #     "step4_json": step4_obj
+        # }, separators=(",", ":")))
     except Exception:
         pass
 
@@ -734,7 +843,7 @@ async def main() -> None:
                 },
             }
             wb_res = _post_webhook(args.webhook_url, args.webhook_secret, "ta_done", payload)
-            print(f"[WEBHOOK] result={wb_res}", flush=True)
+            #print(f"[WEBHOOK] result={wb_res}", flush=True)
         except Exception as e:
             print(f"[WEBHOOK] WARN: failed to post webhook: {type(e).__name__}: {e}", flush=True)
 
@@ -750,6 +859,20 @@ async def main() -> None:
                     pass
         except Exception:
             pass
+
+    # Final state snapshot (lightweight) to ensure ADK session has the latest view
+    try:
+        session.state.setdefault("summary", {})
+        session.state["summary"].update({
+            "step1_count": len(web_evidence) if isinstance(web_evidence, list) else 0,
+            "step2_count": len((problems or {}).get("problems", [])) if isinstance(problems, dict) else 0,
+            "step3_count": len((hypotheses or {}).get("issues", [])) if isinstance(hypotheses, dict) else 0,
+            "step4_count": len((alignments or {}).get("alignments", [])) if isinstance(alignments, dict) else 0,
+            "step5_count": len((events or {}).get("compelling_events", [])) if isinstance(events, dict) else 0,
+        })
+    except Exception:
+        # Don't let state snapshot failures break the pipeline
+        pass
 
     await _append_event(session_service, session, "pipeline_complete", "Pipeline complete.", {"status": "complete"})
 

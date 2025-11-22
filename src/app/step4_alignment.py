@@ -49,13 +49,54 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import os
 import re
+import sys
 from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Tuple, Optional, Iterable
 
+from google import genai
+from google.genai import types as genai_types
+from google.genai.types import HttpOptions
+
 ISO_NOW = datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+_genai_client: Optional[genai.Client] = None
+
+def _ensure_genai_client() -> genai.Client:
+    """Return a google-genai Client configured for Vertex AI.
+
+    This step expects VERTEX_PROJECT and VERTEX_LOCATION to be provided via
+    environment variables (they are set by the Cloud Functions/Run deploy
+    Makefile). No API keys are used; ADC is assumed.
+    """
+    global _genai_client
+    if _genai_client is not None:
+        return _genai_client
+
+    project = os.environ.get("GOOGLE_CLOUD_PROJECT") or os.environ.get("VERTEX_PROJECT")
+    if not project:
+        raise RuntimeError("GOOGLE_CLOUD_PROJECT is not set for Step 4.")
+
+    location = os.environ.get("GOOGLE_CLOUD_LOCATION", "global")
+
+    _genai_client = genai.Client(
+        # GOOGLE_GENAI_USE_VERTEXAI=True in env also works, but this is explicit:
+        vertexai=True,
+        project=project,
+        location=location,
+        http_options=HttpOptions(
+            api_version="v1",
+            headers={
+                # "shared"  -> standard pay-as-you-go
+                # "dedicated" -> use provisioned throughput (must pair with PT endpoint model)
+                "X-Vertex-AI-LLM-Request-Type": "dedicated",
+            },
+        ),
+    )
+    return _genai_client
 
 def _require_file(p: Path, what: str) -> Path:
     if not p.exists():
@@ -165,8 +206,38 @@ def _flatten_taxonomy(blob: Any) -> List[Tuple[str, str]]:
       { "groups": [{"name": "...","challenges":["..."]}, ...] }
       { "compliance_and_security": ["Ensuring Consistent Security Posture", ...], ... }
       or any dict[str, list[str]]
+
+    Also supports:
+      {
+        "technology_gaps": [
+          { "challenge": "...", "description": "..." },
+          ...
+        ],
+        "market_pressures": [
+          { "challenge": "...", "description": "..." }
+        ],
+        ...
+      }
+
+    And a wrapper shape:
+      {
+        "step": "...",
+        "company_name": "...",
+        "generated_at": "...",
+        "customer_challenges": {
+          "technology_gaps": [ { "challenge": "...", ... }, ... ],
+          ...
+        }
+      }
     """
     out: List[Tuple[str, str]] = []
+
+    # Unwrap known wrapper key if present (e.g., "customer_challenges")
+    if isinstance(blob, dict) and "customer_challenges" in blob and isinstance(blob["customer_challenges"], dict):
+        # Flatten the inner dict and return early if there are no other top‑level structures to consider
+        inner = _flatten_taxonomy(blob["customer_challenges"])
+        out.extend(inner)
+        # Note: we still continue to process the rest of the dict in case it contains other compatible shapes
 
     if isinstance(blob, dict):
         # Direct list under key "challenges"
@@ -185,15 +256,23 @@ def _flatten_taxonomy(blob: Any) -> List[Tuple[str, str]]:
                         if isinstance(c, str) and c.strip():
                             out.append((gname, c.strip()))
 
-        # Generic dict-of-lists
+        # Generic dict-of-lists / dict-of-list-of-dicts
         for k, v in blob.items():
-            if k in {"challenges", "groups"}:
+            if k in {"challenges", "groups", "customer_challenges"}:
                 continue
-            if isinstance(v, list) and all(isinstance(x, str) for x in v):
-                for c in v:
-                    cs = c.strip()
-                    if cs:
-                        out.append((k, cs))
+            if isinstance(v, list):
+                # Case 1: list of strings
+                if all(isinstance(x, str) for x in v):
+                    for c in v:
+                        cs = c.strip()
+                        if cs:
+                            out.append((k, cs))
+                # Case 2: list of dicts with "challenge" field
+                elif all(isinstance(x, dict) and isinstance(x.get("challenge"), str) for x in v):
+                    for obj in v:
+                        c = (obj.get("challenge") or "").strip()
+                        if c:
+                            out.append((k, c))
 
     elif isinstance(blob, list):
         # List of strings => general group
@@ -301,13 +380,105 @@ def align_issues_to_taxonomy(
             "issue_title": title,
             "issue_category": category,
             "aligned_challenges": aligned_list,
-            "gaps": gaps
+            "gaps": gaps,
+            # Pass through original evidence from Step 3 so downstream steps
+            # (e.g., Step 5) can access source dates and snippets.
+            "evidence": p.get("evidence") or []
         })
 
     return {
         "company": company,
         "time_window": time_window,
         "alignments": alignments
+    }
+
+
+# ----------------------------
+# Gemini LLM-powered alignment with fallback
+# ----------------------------
+
+def _llm_align_issues_to_taxonomy(
+    issues_json: dict,
+    taxonomy_json: dict,
+    top_k: int = 3,
+) -> Dict[str, Any]:
+    """Use Gemini (Vertex) to align issues to taxonomy with deterministic fallback.
+
+    The LLM is responsible for:
+      - Understanding each issue (title, why_it_matters, evidence)
+      - Mapping issues to the most relevant taxonomy challenges
+      - Producing the same alignment schema as align_issues_to_taxonomy()
+
+    If the model response cannot be parsed or is missing required
+    structure, we fall back to the deterministic align_issues_to_taxonomy().
+    """
+    client = _ensure_genai_client()
+
+    company = issues_json.get("company") or "Unknown"
+    time_window = issues_json.get("time_window") or "Unknown"
+    problems = issues_json.get("problems") or []
+
+    payload = {
+        "company": company,
+        "time_window": time_window,
+        "problems": problems,
+        "taxonomy": taxonomy_json,
+        "top_k": max(1, int(top_k or 1)),
+    }
+
+    system_prompt = (
+        "You are an expert B2B strategist. Given a set of evidenced problems "
+        "for a company and a taxonomy of customer challenges, align each problem "
+        "to the most relevant challenges. Avoid generic or overly templated phrasing; "
+        "ground your rationale in the actual issue text and taxonomy language. "
+        "Return ONLY a single JSON object with fields: company, time_window, alignments. "
+        "Each alignment must follow this schema: "
+        "{issue_title, issue_category, aligned_challenges, gaps, evidence}. "
+        "aligned_challenges is a list of objects with fields: "
+        "{challenge_group, challenge, rationale, alignment_strength}. "
+        "alignment_strength must be one of: 'Strong', 'Partial', 'Weak'. "
+        "The evidence array should be passed through from the input problems "
+        "where appropriate; do not hallucinate new evidence."
+    )
+
+    temp_val = float(os.getenv("STEP4_TEMPERATURE", "0.4"))
+
+    contents = [
+        {
+            "role": "user",
+            "parts": [
+                {"text": json.dumps(payload, ensure_ascii=False)},
+            ],
+        }
+    ]
+
+    gen_config = genai_types.GenerateContentConfig(
+        system_instruction=system_prompt,
+        temperature=temp_val,
+        max_output_tokens=8192,
+        response_mime_type="application/json",
+    )
+
+    resp = client.models.generate_content(
+        model=os.getenv("STEP4_MODEL", "gemini-2.5-pro"),
+        contents=contents,
+        config=gen_config,
+    )
+
+    try:
+        text = resp.text if hasattr(resp, "text") else str(resp)
+        obj = json.loads(text)
+    except Exception:
+        return align_issues_to_taxonomy(issues_json, taxonomy_json, top_k=max(1, int(top_k or 1)))
+
+    alignments = obj.get("alignments") if isinstance(obj, dict) else None
+    if not isinstance(alignments, list):
+        return align_issues_to_taxonomy(issues_json, taxonomy_json, top_k=max(1, int(top_k or 1)))
+
+    return {
+        "company": obj.get("company") or company,
+        "time_window": obj.get("time_window") or time_window,
+        "alignments": alignments,
     }
 
 # ----------------------------
@@ -323,8 +494,11 @@ def run_step(
     time_window: Optional[str] = None,
 ) -> dict:
     """
-    Thin wrapper around align_issues_to_taxonomy() so run.py can call this
-    step in-process (no subprocess, no disk I/O). Preserves existing logic.
+    Run Step 4 using Gemini (Vertex) with deterministic fallback.
+
+    Preferred path: use _llm_align_issues_to_taxonomy for creative,
+    evidence-grounded alignment of issues to taxonomy. If Vertex is not
+    configured or the call fails, fall back to align_issues_to_taxonomy().
     """
     # Make a shallow copy to avoid mutating caller's object when overriding
     issues_local = dict(issues or {})
@@ -332,7 +506,23 @@ def run_step(
         issues_local["company"] = company
     if time_window:
         issues_local["time_window"] = time_window
-    return align_issues_to_taxonomy(issues_local, taxonomy, top_k=max(1, int(top_k or 1)))
+
+    try:
+        return _llm_align_issues_to_taxonomy(
+            issues_json=issues_local,
+            taxonomy_json=taxonomy,
+            top_k=top_k,
+        )
+    except Exception as e:
+        print(
+            f"[Step 4] LLM alignment failed, falling back to deterministic alignment: {e}",
+            file=sys.stderr,
+        )
+        return align_issues_to_taxonomy(
+            issues_local,
+            taxonomy,
+            top_k=max(1, int(top_k or 1)),
+        )
 
 # ----------------------------
 # Markdown rendering (optional)
@@ -424,7 +614,7 @@ def main():
     out_json_path.parent.mkdir(parents=True, exist_ok=True)
     with open(out_json_path, "w", encoding="utf-8") as fh:
         json.dump(aligned, fh, indent=2, ensure_ascii=False)
-    print(f"[Step 4] Wrote alignment JSON → {out_json_path}")
+    print(f"[Step 4] Wrote alignment JSON → {out_json_path}", file=sys.stderr)
     print(f"__STEP4_JSON_PATH__:{out_json_path}")
 
     if out_md_path:
@@ -432,7 +622,7 @@ def main():
         out_md_path.parent.mkdir(parents=True, exist_ok=True)
         with open(out_md_path, "w", encoding="utf-8") as fh:
             fh.write(md)
-        print(f"[Step 4] Wrote Markdown summary → {out_md_path}")
+        print(f"[Step 4] Wrote Markdown summary → {out_md_path}", file=sys.stderr)
         print(f"__STEP4_MD_PATH__:{out_md_path}")
 
     align_count = len(aligned.get("alignments") or [])

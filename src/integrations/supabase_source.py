@@ -171,6 +171,18 @@ def stream_campaign_datasets(
                     "id,name,description,status,start_date,end_date,budget,client_id,"
                     "client_profile,target_industry_segments,geo_focus,target_personas,"
                     "known_competitors,campaign_value_prop,lookback_period,"
+                    "processing_timeout_seconds,webhook_inactivity_timeout_seconds,trigger_request_timeout_seconds,"
+                    "ta_step1_temperature,ta_step1_max_output_tokens,"
+                    "ta_step1_external_provisioned_qpm,ta_step1_external_safety_margin,ta_step1_external_concurrency,"
+                    "ta_step2_temperature,ta_step2_max_output_tokens,"
+                    "ta_step3_temperature,ta_step3_max_output_tokens,"
+                    "ta_step4_temperature,ta_step4_max_output_tokens,"
+                    "ta_step5_temperature,ta_step5_max_output_tokens,"
+                    "ca_step1_temperature,ca_step1_max_output_tokens,"
+                    "ca_step2_temperature,ca_step2_max_output_tokens,"
+                    "ca_step3_temperature,ca_step3_max_output_tokens,"
+                    "ca_step4_temperature,ca_step4_max_output_tokens,"
+                    "ca_step5_temperature,ca_step5_max_output_tokens,"
                     "clients ( company, homepage, industry, name )"
                 ),
                 filters={"id": f"eq.{campaign_id}"},

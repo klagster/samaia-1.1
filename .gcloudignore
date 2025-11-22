@@ -12,6 +12,16 @@
 # below:
 .git
 .gitignore
-
+.venv/
+tests/
+.env
 node_modules
+preview_queries.py
+tweak_web_queries.py
+vertex_grounding_test.py
+vertex_test.py
+QPM_test.py
+logs.txt
+Makefile
+
 #!include:.gitignore

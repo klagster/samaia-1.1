@@ -11,7 +11,7 @@ Requirements:
 Env:
   GOOGLE_CLOUD_PROJECT=...
   VERTEX_LOCATION=us-central1 (or your region)
-  MODEL_SEARCH=gemini-2.0-flash-001 (or another model that supports google_search)
+  MODEL_SEARCH=gemini-2.0-pro (or another model that supports google_search)
 
 Usage:
   python preview_queries.py configs/web_queries.generic.json --company "Equinix" --domain "equinix.com"
@@ -137,7 +137,7 @@ def main():
     import os
     project = args.project or os.environ.get("GOOGLE_CLOUD_PROJECT")
     location = args.location or os.environ.get("VERTEX_LOCATION", "us-central1")
-    model = args.model or os.environ.get("MODEL_SEARCH", "gemini-2.0-flash-001")
+    model = args.model or os.environ.get("MODEL_SEARCH", "gemini-2.0-pro")
     if not project:
         print("ERROR: set GOOGLE_CLOUD_PROJECT or pass --project", file=sys.stderr); sys.exit(2)
 

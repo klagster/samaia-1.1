@@ -1,347 +1,449 @@
-import json
-import logging
 import os
-from pathlib import Path
-from typing import List, Dict, Optional, Any
-from datetime import datetime
+import json
+from datetime import datetime, timezone
+from typing import List, Dict, Any
+import logging
+import asyncio 
+import re 
+import time
+from google import genai
+from google.genai.types import HttpOptions
+from google.genai.errors import APIError 
+from google.auth import default as google_auth_default
+
+# NEW IMPORT: Add tenacity for robust error handling
+from tenacity import retry, wait_exponential, stop_after_attempt, retry_if_exception_type 
 
 logger = logging.getLogger(__name__)
 
-__all__ = ["collect_web_events_for_company"]
+# Shared log context helper
+def _log_ctx() -> str:
+    """Return a stable context string for logs (run_id, campaign_id, target_account_id)."""
+    run_id = os.getenv("RUN_ID")
+    campaign_id = os.getenv("CAMPAIGN_ID")
+    ta_id = os.getenv("TARGET_ACCOUNT_ID")
+    return f"[ctx run_id={run_id} campaign_id={campaign_id} ta_id={ta_id}]"
 
+# ---------------------------
+# Rate Limiting & Model Configuration (Step 1)
+# ---------------------------
+# These defaults can be overridden from the campaign record via env vars
+# (set in src/app/run.py using TA_STEP1_* keys).
+try:
+    PROVISIONED_QPM = int(os.getenv("TA_STEP1_EXTERNAL_PROVISIONED_QPM", "60"))
+    logger.debug(f"[collector]{_log_ctx()} Loaded PROVISIONED_QPM from env: {PROVISIONED_QPM}")
+except ValueError:
+    logger.debug(f"[collector]{_log_ctx()} *** Invalid PROVISIONED_QPM in env; using default 60 ***")
+    PROVISIONED_QPM = 60
 
-def _load_query_pack(path: str) -> Dict[str, Any]:
-    """Load query pack JSON file."""
+try:
+    SAFETY_MARGIN = float(os.getenv("TA_STEP1_EXTERNAL_SAFETY_MARGIN", "0.75"))
+    logger.debug(f"[collector]{_log_ctx()} Loaded SAFETY_MARGIN from env: {SAFETY_MARGIN}")
+except ValueError:
+    SAFETY_MARGIN = 0.75
+
+# Clamp to reasonable ranges consistent with DB constraints
+if PROVISIONED_QPM < 1:
+    PROVISIONED_QPM = 1
+if PROVISIONED_QPM > 1000:
+    PROVISIONED_QPM = 1000
+
+if SAFETY_MARGIN < 0.1:
+    SAFETY_MARGIN = 0.1
+if SAFETY_MARGIN > 1.0:
+    SAFETY_MARGIN = 1.0
+
+EFFECTIVE_QPM = int(PROVISIONED_QPM * SAFETY_MARGIN)
+
+try:
+    CONCURRENCY_LIMIT = int(os.getenv("TA_STEP1_EXTERNAL_CONCURRENCY", "3"))
+    logger.debug(f"[collector]{_log_ctx()} Loaded CONCURRENCY_LIMIT from env: {CONCURRENCY_LIMIT}")
+except ValueError:
+    CONCURRENCY_LIMIT = 3
+
+if CONCURRENCY_LIMIT < 1:
+    CONCURRENCY_LIMIT = 1
+if CONCURRENCY_LIMIT > 50:
+    CONCURRENCY_LIMIT = 50
+
+# Temperature and max_output_tokens for the search model
+try:
+    STEP1_TEMPERATURE = float(os.getenv("TA_STEP1_TEMPERATURE", "0.2"))
+    logger.debug(f"[collector]{_log_ctx()} Loaded STEP1_TEMPERATURE from env: {STEP1_TEMPERATURE}")
+except ValueError:
+    STEP1_TEMPERATURE = 0.2
+
+try:
+    STEP1_MAX_OUTPUT_TOKENS = int(os.getenv("TA_STEP1_MAX_OUTPUT_TOKENS", "1024"))
+    logger.debug(f"[collector]{_log_ctx()} Loaded STEP1_MAX_OUTPUT_TOKENS from env: {STEP1_MAX_OUTPUT_TOKENS}")
+except ValueError:
+    STEP1_MAX_OUTPUT_TOKENS = 1024
+
+logger.info(
+    f"[collector]{_log_ctx()} Configured for {PROVISIONED_QPM} QPM "
+    f"(effective {EFFECTIVE_QPM} with margin {SAFETY_MARGIN}), "
+    f"concurrency={CONCURRENCY_LIMIT}, temp={STEP1_TEMPERATURE}, "
+    f"max_tokens={STEP1_MAX_OUTPUT_TOKENS}"
+)
+
+# ---------------------------
+# Token Bucket Rate Limiter
+# ---------------------------
+class TokenBucketRateLimiter:
+    """Token bucket rate limiter for smooth request distribution."""
+    
+    def __init__(self, requests_per_minute: int):
+        self.requests_per_minute = requests_per_minute
+        self.tokens = float(requests_per_minute)
+        self.max_tokens = float(requests_per_minute)
+        self.last_update = time.time()
+        self.lock = asyncio.Lock()
+        
+        # Calculate refill rate (tokens per second)
+        self.refill_rate = requests_per_minute / 60.0
+        
+        logger.info(f"[RateLimiter] Initialized: {requests_per_minute} QPM, {self.refill_rate:.2f} tokens/sec")
+    
+    async def acquire(self):
+        """Acquire a token, waiting if necessary."""
+        async with self.lock:
+            now = time.time()
+            
+            # Refill tokens based on time elapsed
+            elapsed = now - self.last_update
+            self.tokens = min(self.max_tokens, self.tokens + (elapsed * self.refill_rate))
+            self.last_update = now
+            
+            # If we don't have a full token, wait until we do
+            if self.tokens < 1.0:
+                wait_time = (1.0 - self.tokens) / self.refill_rate
+                logger.debug(f"[RateLimiter] Waiting {wait_time:.2f}s for token (current: {self.tokens:.2f})")
+                await asyncio.sleep(wait_time)
+                
+                # Update after sleep
+                now = time.time()
+                elapsed = now - self.last_update
+                self.tokens = min(self.max_tokens, self.tokens + (elapsed * self.refill_rate))
+                self.last_update = now
+            
+            # Consume one token
+            self.tokens -= 1.0
+            logger.debug(f"[RateLimiter] Token acquired. Remaining: {self.tokens:.2f}/{self.max_tokens}")
+
+# Global rate limiter instance
+_rate_limiter = TokenBucketRateLimiter(requests_per_minute=EFFECTIVE_QPM)
+
+# ---------------------------
+# Shared Vertex genai client
+# ---------------------------
+
+_client = None
+
+def _get_genai_client():
+    """Return a shared google.genai client configured for Vertex AI (Synchronous)."""
+    global _client
+    if _client is not None:
+        return _client
+
+    project = os.environ.get("GOOGLE_CLOUD_PROJECT") or os.environ.get("VERTEX_PROJECT")
+    location = os.environ.get("GOOGLE_CLOUD_LOCATION", "global")
+    model_name = os.getenv("MODEL_SEARCH", "gemini-2.5-pro") 
+
     try:
-        p = Path(path)
-        if p.exists():
-            return json.loads(p.read_text(encoding="utf-8"))
-    except Exception as e:
-        logger.warning(f"Failed to load query pack from {path}: {e}")
-    return {"categories": [], "defaults": {"recency_days": 540, "max_results": 10}}
-
-
-def _build_queries(query_pack: Dict[str, Any], company_name: str, domain: Optional[str]) -> List[str]:
-    """Build search queries from query pack."""
-    queries = []
-    categories = query_pack.get("categories", [])
-    
-    # Prioritize categories - focus on news, risks, and market signals
-    priority_categories = [
-        "Market, News & Analyst Reports",
-        "Risk, Compliance & Security",
-        "Financial Filings & Capital Markets",
-        "Technology & Operations (General)",
-        "M&A, Geography & Expansion",
-    ]
-    
-    # First, try priority categories
-    for category in categories:
-        cat_name = category.get("name", "")
-        if cat_name not in priority_categories:
-            continue
-            
-        category_queries = category.get("queries", [])
-        for query_template in category_queries[:2]:  # Max 2 queries per category
-            # Skip queries that require domain if we don't have one
-            if "{{domain}}" in query_template and not domain:
-                continue
-            
-            # Replace placeholders
-            query = query_template.replace("{{company}}", f'"{company_name}"')
-            if domain:
-                query = query.replace("{{domain}}", domain)
-            
-            queries.append(query)
-            
-            # Limit total queries
-            if len(queries) >= 12:
-                break
-        
-        if len(queries) >= 12:
-            break
-    
-    # If we still need more queries, add from other categories
-    if len(queries) < 8:
-        for category in categories:
-            cat_name = category.get("name", "")
-            if cat_name in priority_categories:
-                continue  # Already processed
-                
-            category_queries = category.get("queries", [])
-            for query_template in category_queries[:1]:  # Just 1 from each
-                # Skip queries that require domain if we don't have one
-                if "{{domain}}" in query_template and not domain:
-                    continue
-                
-                # Replace placeholders
-                query = query_template.replace("{{company}}", f'"{company_name}"')
-                if domain:
-                    query = query.replace("{{domain}}", domain)
-                
-                queries.append(query)
-                
-                if len(queries) >= 12:
-                    break
-            
-            if len(queries) >= 12:
-                break
-    
-    return queries[:12]  # Return max 12 queries
-
-
-def _execute_vertex_search(query: str, max_results: int = 5) -> List[Dict[str, Any]]:
-    """
-    Execute web search using Vertex AI's Google Search via the google.genai SDK.
-    Uses the same approach as preview_queries.py - asks for structured JSON response.
-    """
-    try:
-        from google import genai
-        from google.auth import default as google_auth_default
-        import re
-        
-        project = os.getenv("GOOGLE_CLOUD_PROJECT", "portend-sam")
-        location = os.getenv("VERTEX_LOCATION", "us-central1")
-        model_name = os.getenv("MODEL_SEARCH", "gemini-2.0-flash-001")
-        
-        try:
-            creds, adc_project = google_auth_default(scopes=["https://www.googleapis.com/auth/cloud-platform"])
-            logger.info(f"[collector] PROJECT={project} (ADC project={adc_project}) LOCATION={location} MODEL={model_name}")
-            logger.info(f"[collector] ADC credentials type={type(creds).__name__}")
-        except Exception as e:
-            logger.warning(f"[collector] Unable to resolve ADC credentials: {e}")
-        
-        logger.debug(f"[collector] Initializing genai client for {model_name}")
-        
-        client = genai.Client(vertexai=True, project=project, location=location)
-        
-        # Same prompt structure as preview_queries.py - ask for JSON response
-        prompt = (
-            f'Use Google Search. Return ONLY JSON {{sources:[{{title,url}}]}}. '
-            f'Find up to {max_results} results for: {query}'
+        creds, adc_project = google_auth_default(
+            scopes=["https://www.googleapis.com/auth/cloud-platform"]
         )
-        
-        # Configure with Google Search tool and JSON response
-        config = {
-            "tools": [{"google_search": {}}],
-            "response_mime_type": "application/json",
-            "temperature": 0,
-            "max_output_tokens": 768,
-        }
-        
-        logger.debug(f"[collector] Sending search request for: {query[:80]}...")
-        resp = client.models.generate_content(
+        logger.debug(
+            f"[collector] _get_genai_client ADC project={adc_project}, "
+            f"creds_type={type(creds).__name__}, MODEL={model_name}, "
+            f"PROJECT={project}, LOCATION={location}"
+        )
+    except Exception as e:
+        logger.warning(f"[collector] _get_genai_client unable to resolve ADC credentials: {e}")
+
+    _client = genai.Client(
+        vertexai=True,
+        project=project,
+        location=location,
+        http_options=HttpOptions(
+            api_version="v1",
+            headers={
+                "X-Vertex-AI-LLM-Request-Type": "dedicated", 
+            },
+        ),
+    )
+    return _client
+
+def _get_async_genai_client():
+    """Return the shared asynchronous google.genai client."""
+    client = _get_genai_client()
+    return client.aio
+
+
+# Helper to load a query pack JSON file
+def _load_query_pack(path: str) -> Dict[str, Any]:
+    """Load a query pack JSON file."""
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            pack = json.load(f)
+            logger.debug(f"[collector] Loaded query pack from {path} with {len(pack.get('categories', []))} categories")
+            return pack
+    except Exception as e:
+        logger.warning(f"[collector] Failed to load query pack '{path}': {e}")
+        return {}
+
+
+# Helper to extract JSON from response text
+def _extract_first_json_obj(text: str):
+    """Safely extracts the first valid JSON object from a string."""
+    m = re.search(r"\{[\s\S]*\}", text)
+    if not m:
+        return None
+    
+    blk = m.group(0)
+    try:
+        return json.loads(blk)
+    except Exception:
+        # Fallback: Try to recover first balanced JSON object
+        depth = 0
+        start = None
+        for i, ch in enumerate(text):
+            if ch == "{":
+                if start is None:
+                    start = i
+                depth += 1
+            elif ch == "}":
+                depth -= 1
+                if depth == 0 and start is not None:
+                    frag = text[start : i + 1]
+                    try:
+                        return json.loads(frag)
+                    except Exception:
+                        start = None
+        return None
+
+
+# Retry decorator with faster backoff (since we have rate limiting)
+@retry(
+    wait=wait_exponential(min=2, max=30),  # Faster backoff: 2s to 30s
+    stop=stop_after_attempt(3),             # Only 3 retries (rate limiter prevents most 429s)
+    retry=retry_if_exception_type(APIError),
+    reraise=True
+)
+async def _execute_vertex_search(query: str, max_results: int = 5) -> List[Dict[str, Any]]:
+    """Execute web search using Vertex AI's Google Search via the google.genai SDK asynchronously."""
+    
+    logger.debug(f"[collector] BEGIN vertex search: query='{query[:60]}...', max_results={max_results}")
+    
+    project = os.environ.get("GOOGLE_CLOUD_PROJECT") or os.environ.get("VERTEX_PROJECT")
+    location = os.environ.get("GOOGLE_CLOUD_LOCATION", "global")
+    model_name = os.getenv("MODEL_SEARCH", "gemini-2.5-pro")
+
+    # CRITICAL: Acquire rate limit token before making request
+    await _rate_limiter.acquire()
+
+    client_aio = _get_async_genai_client()
+
+    # Prompt: force *only* JSON, grounded in Google Search citations
+    prompt = (
+        "You are a research assistant using Google Search as your only data source.\n"
+        "You must NOT hallucinate URLs or articles.\n"
+        "Use the Google Search tool to find real results, then return ONLY strict JSON.\n\n"
+        "Return JSON with this exact structure (no extra fields, no comments, no explanations):\n"
+        "{\n"
+        "  \"sources\": [\n"
+        "    {\n"
+        "      \"title\": \"string\",\n"
+        "      \"url\": \"string\",\n"
+        "      \"snippet\": \"short description if available\",\n"
+        "      \"published_at\": \"ISO 8601 date-time if you can find it, else null\"\n"
+        "    }\n"
+        "  ]\n"
+        "}\n\n"
+        f"Rules:\n"
+        f"- If you cannot find any relevant results, return {{\"sources\": []}}.\n"
+        f"- Do NOT wrap the JSON in markdown fences.\n"
+        f"- Do NOT include any trailing text after the closing }}.\n\n"
+        f"Now perform a grounded search for: {query}\n"
+        f"Return up to {max_results} high-quality, recent results that mention this company or topic."
+    )
+
+    config = {
+        "tools": [{"google_search": {}}],
+        "response_mime_type": "application/json",
+        "temperature": STEP1_TEMPERATURE,
+        "max_output_tokens": STEP1_MAX_OUTPUT_TOKENS,
+    }
+
+    logger.debug(f"[collector] Sending grounded search request for: {query[:80]}...")
+
+    try:
+        resp = await client_aio.models.generate_content(
             model=model_name,
             contents=[{"role": "user", "parts": [{"text": prompt}]}],
             config=config,
         )
-        
-        # Inspect raw response for tool execution traces
-        try:
-            raw_text = getattr(resp, "text", None) or ""
-            logger.info(f"[collector] resp.text length={len(raw_text)}")
-            cands = getattr(resp, "candidates", []) or []
-            logger.info(f"[collector] candidates={len(cands)}")
-            for ci, c in enumerate(cands):
-                content = getattr(c, "content", None)
-                parts = getattr(content, "parts", None) if content else None
-                if parts is not None:
-                    logger.debug(f"[collector] cand[{ci}] parts sample={str(parts)[:300]}")
-                gm = getattr(c, "grounding_metadata", None)
-                if gm is not None:
-                    logger.debug(f"[collector] cand[{ci}] grounding_metadata={gm}")
-        except Exception as e:
-            logger.warning(f"[collector] failed to inspect Vertex response: {e}")
-        
-        # Extract JSON from response
-        def extract_first_json_obj(text: str):
-            m = re.search(r'\{[\s\S]*\}', text)
-            if not m:
-                return None
-            blk = m.group(0)
-            try:
-                return json.loads(blk)
-            except Exception:
-                # Try to recover first balanced JSON object
-                depth = 0; start = None
-                for i, ch in enumerate(text):
-                    if ch == '{':
-                        if start is None:
-                            start = i
-                        depth += 1
-                    elif ch == '}':
-                        depth -= 1
-                        if depth == 0 and start is not None:
-                            frag = text[start:i+1]
-                            try:
-                                return json.loads(frag)
-                            except Exception:
-                                start = None
-                return None
-        
+
+        # Extract results
         text = getattr(resp, "text", None) or str(resp)
-        obj = extract_first_json_obj(text) or {}
+        obj = _extract_first_json_obj(text) or {}
         sources = obj.get("sources") or []
-        
-        # Normalize schema
+
         results = []
         for s in sources:
             title = (s.get("title") or "").strip()
             url = (s.get("url") or "").strip()
+            snippet = (s.get("snippet") or "").strip()
+            raw_date = (s.get("published_at") or s.get("date") or "").strip()
+            source_date_iso = None
+            if raw_date:
+                try:
+                    dt = (
+                        datetime.fromisoformat(raw_date.replace("Z", "+00:00"))
+                        if "T" in raw_date or "+" in raw_date or "Z" in raw_date
+                        else datetime.fromisoformat(raw_date)
+                    )
+                    source_date_iso = dt.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+                except Exception:
+                    source_date_iso = raw_date
+
             if title and url:
-                results.append({
-                    "title": title,
-                    "url": url,
-                    "snippet": "",
-                })
-        
-        logger.info(f"[collector] Vertex search returned {len(results)} results for query")
+                results.append(
+                    {
+                        "title": title,
+                        "url": url,
+                        "snippet": snippet,
+                        "source_date_iso": source_date_iso,
+                    }
+                )
+
+        logger.debug(
+            f"[collector] END vertex search: found {len(results)} results for query='{query[:60]}...'"
+        )
         return results[:max_results]
         
     except ImportError as e:
-        logger.error(f"[collector] Failed to import google.genai: {e}")
-        logger.error("[collector] Install with: pip install google-genai")
-        return []
+        logger.error(f"[collector] Failed to import google.genai dependencies: {e}")
+        raise
     except Exception as e:
-        logger.warning(f"[collector] Vertex search failed for query '{query[:50]}...': {e}")
+        logger.error(f"[collector] Search failed for query '{query[:50]}...': {e}")
         logger.debug(f"[collector] Full error: {e}", exc_info=True)
-        return []
+        raise e
 
 
-def _execute_mock_search(query: str, company_name: str, domain: Optional[str], max_results: int = 5) -> List[Dict[str, Any]]:
-    """
-    Mock search for development/testing when Vertex search fails.
-    Returns synthetic results based on the query pattern.
-    """
-    results = []
-    base_domain = domain or "example.com"
-    
-    # Generate mock results based on query type
-    if "news" in query.lower() or "press" in query.lower():
-        results.append({
-            "title": f"{company_name} Announces New Security Features",
-            "url": f"https://{base_domain}/news/security-announcement-2024",
-            "snippet": f"{company_name} has announced major new security features to enhance protection...",
-        })
-    
-    if "investor" in query.lower() or "earnings" in query.lower():
-        results.append({
-            "title": f"{company_name} Q3 2024 Earnings Call Transcript",
-            "url": f"https://investors.{base_domain}/earnings/q3-2024",
-            "snippet": f"{company_name} reported strong Q3 results with revenue growth...",
-        })
-    
-    if "breach" in query.lower() or "incident" in query.lower() or "vulnerability" in query.lower():
-        results.append({
-            "title": f"{company_name} Security Update",
-            "url": f"https://{base_domain}/security/updates/latest",
-            "snippet": f"{company_name} has released a security update addressing recent concerns...",
-        })
-    
-    if "acquisition" in query.lower() or "partnership" in query.lower():
-        results.append({
-            "title": f"{company_name} Strategic Partnership Announcement",
-            "url": f"https://{base_domain}/news/partnerships",
-            "snippet": f"{company_name} announces strategic partnership to expand market reach...",
-        })
-    
-    if "compliance" in query.lower() or "regulation" in query.lower():
-        results.append({
-            "title": f"{company_name} Achieves SOC 2 Compliance",
-            "url": f"https://{base_domain}/compliance/certifications",
-            "snippet": f"{company_name} has achieved SOC 2 Type II compliance certification...",
-        })
-    
-    return results[:max_results]
+async def execute_vertex_search_from_pack(
+    company: str,
+    domain: str,
+    pack_path: str | None = None,
+    max_results_per_query: int = 2,
+    max_overall_results: int = 10,
+) -> List[Dict[str, Any]]:
+    """Execute grounded web search using a query pack with optimized concurrency."""
 
+    pack_path = pack_path or "configs/web_queries.combined.json"
 
-def collect_web_events_for_company(
-    *,
-    company_name: str,
-    domain: Optional[str] = None,
-    max_results: int = 25,
-) -> List[Dict]:
-    """
-    Collector invoked by step1_evidence_grabber.py.
-    
-    Uses Vertex AI Google Search grounding to collect real web events.
-    Falls back to mock data if Vertex search fails.
-    """
-    # Get query pack from environment or use default
-    query_pack_path = os.getenv("WEB_QUERY_PACK", "configs/web_queries.generic.json")
-    use_mock = os.getenv("USE_MOCK_SEARCH", "false").lower() == "true"
-    
+    pack = _load_query_pack(pack_path)
+    categories = pack.get("categories") or []
+
     logger.info(
-        "[collector] collect_web_events_for_company(company_name=%r, domain=%r, max_results=%r)",
-        company_name, domain, max_results
+        f"[collector] Running query pack for company='{company}', domain='{domain}', "
+        f"categories={len(categories)}, pack='{pack_path}'"
+    )
+
+    # Use optimized concurrency with semaphore
+    semaphore = asyncio.Semaphore(CONCURRENCY_LIMIT)
+    logger.info(
+        f"[collector] Rate limiting: {EFFECTIVE_QPM} QPM with {CONCURRENCY_LIMIT} concurrent tasks"
+    )
+
+    # Wrapper function with semaphore
+    async def throttled_search(query, max_results):
+        async with semaphore:
+            return await _execute_vertex_search(query, max_results)
+
+    # Prepare all tasks
+    tasks = []
+    task_meta = {} 
+
+    for category in categories:
+        cat_name = (category.get("name") or "Uncategorized").strip() or "Uncategorized"
+        for tmpl in category.get("queries") or []:
+            if not tmpl:
+                continue
+
+            rendered = (
+                tmpl.replace("{{company}}", company or "")
+                .replace("{{domain}}", domain or "")
+            )
+            
+            coro = throttled_search(rendered, max_results=max_results_per_query) 
+            tasks.append(coro)
+            task_meta[coro] = {"category": cat_name, "query": rendered}
+
+    num_tasks = len(tasks)
+    logger.info(f"[collector] Prepared {num_tasks} search tasks.")
+    
+    # Estimate time
+    estimated_time_seconds = (num_tasks / EFFECTIVE_QPM) * 60
+    logger.info(
+        f"[collector] Estimated completion time: {estimated_time_seconds/60:.1f} minutes "
+        f"({num_tasks} queries at {EFFECTIVE_QPM} QPM)"
     )
     
-    # Load query pack
-    query_pack = _load_query_pack(query_pack_path)
-    
-    # Build search queries
-    queries = _build_queries(query_pack, company_name, domain)
-    logger.info(f"[collector] Generated {len(queries)} search queries")
-    logger.info(f"[collector] Using query pack: {os.getenv('WEB_QUERY_PACK', 'configs/web_queries.generic.json')}")
-    logger.info(f"[collector] use_mock={use_mock} queries={len(queries)}")
-    
-    if not queries:
-        logger.warning("[collector] No valid queries generated, using fallback")
-        # Create basic fallback queries
-        queries = [
-            f'"{company_name}" news',
-            f'"{company_name}" security',
-            f'"{company_name}" announcement',
-        ]
-    
-    # Execute searches and collect results
-    all_results = []
-    results_per_query = max(3, max_results // max(len(queries), 1))
-    logger.info(f"[collector] results_per_query={results_per_query} (max_results={max_results})")
-    
-    for i, query in enumerate(queries):
-        logger.info(f"[collector] Query {i+1}/{len(queries)}: {query[:120]}...")
+    # Execute all tasks concurrently
+    start_time = time.time()
+    results_list = await asyncio.gather(*tasks, return_exceptions=True)
+    elapsed_time = time.time() - start_time
+
+    # Process results
+    results: List[Dict[str, Any]] = []
+    seen_urls: set[str] = set()
+    success_count = 0
+    error_count = 0
+
+    for task_result, coro in zip(results_list, tasks):
+        meta = task_meta.get(coro, {"category": "N/A", "query": "N/A"})
+        cat_name = meta["category"]
+        rendered_query = meta["query"]
         
-        if use_mock:
-            search_results = _execute_mock_search(query, company_name, domain, max_results=results_per_query)
-        else:
-            # Try Vertex search first, fall back to mock on failure
-            search_results = _execute_vertex_search(query, max_results=results_per_query)
-            if not search_results:
-                logger.warning(f"[collector] Vertex search returned no results for query {i+1}: {query[:160]}")
-                # Don't fall back to mock for every query - just skip
+        if isinstance(task_result, Exception):
+            error_count += 1
+            logger.warning(
+                f"[collector] Query failed for category='{cat_name}' query='{rendered_query[:60]}...': "
+                f"{type(task_result).__name__}"
+            )
+            continue
+        
+        success_count += 1
+        hits = task_result
+
+        for h in hits:
+            url = (h.get("url") or "").strip()
+            if not url or url in seen_urls:
                 continue
-        
-        # Convert to event format
-        for result in search_results:
-            event = {
-                "title": result.get("title", ""),
-                "url": result.get("url", ""),
-                "snippet": result.get("snippet", ""),
-                "source": "vertex_search" if not use_mock else "mock_search",
-                "query": query,
-                "query_category": queries[i] if i < len(queries) else "unknown",
-                "company": company_name,
-                "domain": domain,
-                "collected_at": datetime.utcnow().isoformat() + "Z",
-            }
-            all_results.append(event)
-        
-        logger.info(f"[collector] Query {i+1} returned {len(search_results)} results")
-        
-        # Stop if we have enough results
-        if len(all_results) >= max_results:
-            logger.info(f"[collector] Reached max_results limit ({max_results})")
-            break
-    
-    # Deduplicate by URL
-    seen_urls = set()
-    unique_results = []
-    for event in all_results:
-        url = event.get("url", "")
-        if url and url not in seen_urls:
+
             seen_urls.add(url)
-            unique_results.append(event)
+            enriched = dict(h)
+            enriched["category"] = cat_name
+            enriched["query"] = rendered_query
+            results.append(enriched)
+
+            if len(results) >= max_overall_results:
+                logger.info(
+                    f"[collector] Reached max_overall_results={max_overall_results}; "
+                    "stopping processing."
+                )
+                break
+        
+        if len(results) >= max_overall_results:
+            break
+
+    actual_qpm = (success_count / elapsed_time) * 60 if elapsed_time > 0 else 0
+    logger.info(
+        f"[collector] Query pack completed in {elapsed_time:.1f}s: "
+        f"{success_count} succeeded, {error_count} failed, "
+        f"actual rate: {actual_qpm:.1f} QPM"
+    )
+    logger.info(f"[collector] Produced {len(results)} unique results")
     
-    logger.info(f"[collector] Collected {len(unique_results)} unique events")
-    return unique_results[:max_results]
+    return results

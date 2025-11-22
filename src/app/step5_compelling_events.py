@@ -1,546 +1,825 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
-Step 5 — Compelling Events (deterministic, no model calls)
+Step 5 – Compelling Events Generator
 
-Inputs:
-  --issues        Path to Step 2 JSON (problems) OR Step 3 JSON (optional; if given, we’ll map by title)
-                  - Step 2 schema: {"company","generated_at","time_window","problems":[{...}]}
-  --alignments    Path to Step 3 JSON (issue–challenge alignments, optional but recommended)
-                  - Step 3 schema: {"company","time_window","alignments":[{...}]}
-  --evidence      Optional: extra harvested evidence (NDJSON or JSON array of dicts)
-                  Accepts keys: source/name, url/url_or_id, date/observed_at/timestamp, quote_or_note/snippet/raw_excerpt
-  --company       Optional: override company name
-  --out-json      REQUIRED: output JSON path
-  --out-md        Optional: write an exec-ready Markdown summary
-  --max-sources   Max sources per event (default 3)
-  --strict        Evidence strictness: high|medium|low (default medium)
+Takes:
+  - problems: list of evidenced problems from Step 2
+  - alignments: list of issue→campaign-challenge alignments from Step 4
+  - extra_evidence: raw web events from Step 1 (optional)
+…and produces:
+  {
+    "step": "compelling_events",
+    "company_name": "<company>",
+    "generated_at": "<iso>",
+    "compelling_events": [
+      {
+        "issue_title": "...",
+        "stakeholder": "...",
+        "event_message": "...",
+        "risk_if_ignored": "...",
+        "urgency_trigger": "...",
+        "opportunity_if_addressed": "...",
+        "aligned_challenges": [...],
+        "sources": [...],
+        "evidence_stats": {
+          "total_sources": int,
+          "issue_specific_sources": int,
+        },
+        "confidence": float,
+      },
+      ...
+    ]
+  }
 
-Behavior:
-  • One compelling event per aligned issue (Step 3). If no Step 3, we derive events from Step 2 problems.
-  • Carries forward URLs/snippets; never fabricates links.
-  • Confidence & urgency are scored from evidence volume, recency, and alignment strength.
-  • Markdown includes “Sources & Citations” bullets.
+This module is meant to be the *only* place where compelling event
+text is generated. run.py just passes inputs in and persists the result.
 
-This script does not import or require run.py; it can be called independently,
-and its JSON output can be picked up by your wrappers.
+Updates in this patch:
+- **LLM Retry Logic**: Implemented exponential backoff and retries for Gemini API calls
+  to handle transient 429 RESOURCE_EXHAUSTED errors using tenacity.
 """
 
 from __future__ import annotations
-import argparse, json, os, re
-from pathlib import Path
-from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Iterable
-from datetime import datetime, timezone
-from typing import Tuple
-# ---------------------- Utilities ----------------------
 
-def first_existing(*candidates: Path) -> Optional[Path]:
-    for c in candidates:
-        if c and c.exists():
-            return c
-    return None
+import os
+import math
+import logging
+import sys
+from datetime import datetime
+from typing import Any, Dict, List, Optional, Tuple
+import json
 
-def make_abs(p: Optional[Path]) -> Optional[Path]:
-    return p.resolve() if isinstance(p, Path) else None
+# --- NEW IMPORTS FOR RETRY LOGIC ---
+from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type, retry_if_exception
+from google.genai.errors import ClientError
+# -----------------------------------
 
-# ---------------------- Utilities ----------------------
+from google import genai
+from google.genai import types as genai_types
+from google.genai.types import HttpOptions
 
-DATE_FORMATS = (
-    "%Y-%m-%d",
-    "%Y-%m-%dT%H:%M:%S%z",
-    "%Y-%m-%dT%H:%M:%S",
-    "%Y-%m-%d %H:%M:%S",
-)
+log = logging.getLogger(__name__)
+if not log.handlers:
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
 
-def parse_date_safe(s: Optional[str]) -> Optional[datetime]:
-    if not s or not isinstance(s, str):
-        return None
-    s = s.strip()
-    for f in DATE_FORMATS:
-        try:
-            dt = datetime.strptime(s, f)
-            if not dt.tzinfo:
-                dt = dt.replace(tzinfo=timezone.utc)
-            return dt
-        except Exception:
-            pass
-    # loose fallbacks
-    try:
-        if re.fullmatch(r"\d{4}-\d{2}", s):
-            return datetime.strptime(s+"-01", "%Y-%m-%d").replace(tzinfo=timezone.utc)
-        if re.fullmatch(r"\d{4}", s):
-            return datetime.strptime(s+"-01-01", "%Y-%m-%d").replace(tzinfo=timezone.utc)
-    except Exception:
-        pass
-    return None
 
-def is_http(url: Optional[str]) -> bool:
-    return isinstance(url, str) and (url.startswith("http://") or url.startswith("https://"))
+# ---------------------------------------------------------------------
+# Small helpers
+# ---------------------------------------------------------------------
 
-def read_json(path: Path) -> Any:
-    return json.loads(path.read_text(encoding="utf-8"))
+def _now_iso() -> str:
+    return datetime.utcnow().isoformat() + "Z"
 
-def read_json_or_ndjson_list(path: Optional[Path]) -> List[dict]:
-    if not path or not path.exists():
+
+def _safe_get(d: Dict[str, Any], key: str, default: Any = None) -> Any:
+    return d.get(key, default) if isinstance(d, dict) else default
+
+
+def _flatten_sources_from_problem(problem: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """
+    Step 2 problems usually look like:
+      {
+        "id": "...",
+        "issue_id": "...",
+        "label": "...",
+        "evidence": [
+          {
+            "title": "...",
+            "url": "...",
+            "source": "vertex_search",
+            "date_iso": "...",
+            "snippet": "...",
+            ...
+          },
+          ...
+        ],
+        ...
+      }
+    """
+    ev = _safe_get(problem, "evidence", [])
+    if not isinstance(ev, list):
         return []
-    text = path.read_text(encoding="utf-8").strip()
-    if not text:
-        return []
-    # try JSON first
-    try:
-        data = json.loads(text)
-        if isinstance(data, list):
-            return [x for x in data if isinstance(x, dict)]
-        if isinstance(data, dict):
-            return [data]
-    except Exception:
-        pass
-    # ndjson fallback
-    out: List[dict] = []
-    for line in text.splitlines():
-        line = line.strip()
-        if not line:
+    return [s for s in ev if isinstance(s, dict)]
+
+
+def _collect_issue_evidence(
+    problems: List[Dict[str, Any]],
+    issue_id: Optional[str],
+) -> List[Dict[str, Any]]:
+    """
+    Collect all evidence rows from problems where issue_id matches.
+    If issue_id is missing, falls back to all evidence.
+    """
+    collected: List[Dict[str, Any]] = []
+    for p in problems:
+        if not isinstance(p, dict):
+            continue
+        if issue_id and p.get("issue_id") != issue_id:
+            continue
+        collected.extend(_flatten_sources_from_problem(p))
+    return collected
+
+
+def _merge_sources(
+    primary: List[Dict[str, Any]],
+    secondary: List[Dict[str, Any]],
+    max_total: int,
+) -> List[Dict[str, Any]]:
+    """
+    Deduplicate sources by (url, title) and cap at max_total.
+    """
+    seen = set()
+    merged: List[Dict[str, Any]] = []
+    for src in list(primary) + list(secondary):
+        if not isinstance(src, dict):
+            continue
+        url = src.get("url") or ""
+        title = src.get("title") or ""
+        key = (url.strip(), title.strip())
+        if key in seen:
+            continue
+        seen.add(key)
+        merged.append(src)
+        if len(merged) >= max_total:
+            break
+    return merged
+
+
+def _parse_date_iso(src: Dict[str, Any]) -> Optional[datetime]:
+    """
+    Try to interpret any of these as an ISO-like date:
+      - source_date_iso
+      - date_iso
+      - published_at
+      - collected_at
+    """
+    for k in ("source_date_iso", "date_iso", "published_at", "collected_at"):
+        val = src.get(k)
+        if not val or not isinstance(val, str):
             continue
         try:
-            obj = json.loads(line)
-            if isinstance(obj, dict):
-                out.append(obj)
+            # handle 'Z' suffix
+            clean = val.replace("Z", "+00:00") if val.endswith("Z") else val
+            return datetime.fromisoformat(clean)
         except Exception:
             continue
-    return out
+    return None
 
-def jaccard(a: Iterable[str], b: Iterable[str]) -> float:
-    sa, sb = set(a), set(b)
-    if not sa or not sb: return 0.0
-    return len(sa & sb) / len(sa | sb)
 
-def toks(s: str) -> List[str]:
-    s = (s or "").lower()
-    s = re.sub(r"[^a-z0-9 ]+", " ", s)
-    return [w for w in s.split() if w]
+def _score_evidence_recency(sources: List[Dict[str, Any]], window_months: int = 18) -> float:
+    """
+    Very rough recency score: 0..1
+    - 1.0 ≈ most evidence within window_months
+    - 0.0 ≈ no parseable dates
+    """
+    if not sources:
+        return 0.0
+    now = datetime.utcnow()
+    # approximate months ~ 30 days
+    window_days = window_months * 30
+    in_window = 0
+    dated = 0
+    for s in sources:
+        dt = _parse_date_iso(s)
+        if not dt:
+            continue
+        dated += 1
+        age_days = (now - dt).days
+        if age_days <= window_days:
+            in_window += 1
+    if dated == 0:
+        return 0.0
+    frac = in_window / max(dated, 1)
+    return max(0.0, min(1.0, frac))
 
-def now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
-# ---------------------- Data classes ----------------------
+def _score_evidence_density(total_sources: int) -> float:
+    """
+    Map "how much evidence" → 0..1 with diminishing returns.
+    """
+    if total_sources <= 0:
+        return 0.0
+    # log-ish curve: 1–2 sources ~0.4-0.6, 3–5 ~0.7-0.85, >8 ~0.95+
+    return max(0.0, min(1.0, math.log10(total_sources + 1) / math.log10(9)))
 
-@dataclass
-class EvidenceItem:
-    source: str
-    url: str
-    date: str
-    quote: str
 
-    @staticmethod
-    def from_any(d: dict) -> Optional["EvidenceItem"]:
-        if not isinstance(d, dict): return None
-        url = d.get("url") or d.get("url_or_id") or d.get("id") or ""
-        if not is_http(url):
-            return None
-        # prefer date-like fields
-        dt = d.get("date") or d.get("observed_at") or d.get("timestamp") or ""
-        dt = str(dt)[:10] if dt else ""
-        src = d.get("source") or d.get("name") or "Web"
-        quote = d.get("quote_or_note") or d.get("snippet") or d.get("raw_excerpt") or d.get("title") or ""
-        if isinstance(quote, str) and len(quote) > 400:
-            quote = quote[:397] + "..."
-        return EvidenceItem(source=src, url=url, date=dt, quote=quote)
+def _score_confidence(
+    issue_specific_sources: int,
+    total_sources: int,
+    recency_score: float,
+    strict_level: str,
+) -> float:
+    """
+    Heavily weight **issue-specific** evidence and recency, then density.
+    """
+    if total_sources <= 0:
+        return 0.0
 
-# ---------------------- Heuristics ----------------------
+    spec_ratio = issue_specific_sources / total_sources if total_sources else 0.0
+    density = _score_evidence_density(total_sources)
 
-STAKEHOLDER_DEFAULT = {
-    "Growth": "CRO / GM",
-    "Cost": "CFO",
-    "Risk": "CISO / Chief Risk Officer",
-    "Operations": "VP, Operations",
-    "CX": "VP, Customer Experience",
-    "Talent": "CHRO",
-}
+    strict_boost = {
+        "low": 0.85,
+        "medium": 1.0,
+        "high": 1.1,
+    }.get(strict_level, 1.0)
 
-def score_confidence(num_sources: int, newest_days: Optional[int], alignment_strength: Optional[str]) -> float:
-    base = 0.2 + min(num_sources, 5) * 0.12   # up to ~0.8
-    if newest_days is not None:
-        if newest_days <= 60: base += 0.1
-        elif newest_days <= 180: base += 0.05
-    if alignment_strength:
-        m = {"Strong": 0.1, "Partial": 0.03, "Weak": 0.0}
-        base += m.get(alignment_strength, 0.0)
-    return max(0.05, min(base, 0.95))
-
-def derive_urgency(newest_days: Optional[int]) -> Dict[str, str]:
-    if newest_days is None:
-        return {"level": "Unknown", "time_horizon": "Unknown"}
-    if newest_days <= 90:
-        return {"level": "High", "time_horizon": "0–6m"}
-    if newest_days <= 180:
-        return {"level": "Medium", "time_horizon": "6–18m"}
-    return {"level": "Low", "time_horizon": "18m+"}
-
-# ---------------------- Loaders ----------------------
-
-def load_step2_problems(p: Optional[Path]) -> List[dict]:
-    if not p or not p.exists(): return []
-    obj = read_json(p)
-    if isinstance(obj, dict) and isinstance(obj.get("problems"), list):
-        return [x for x in obj["problems"] if isinstance(x, dict)]
-    return []
-
-def load_step3_alignments(p: Optional[Path]) -> List[dict]:
-    if not p or not p.exists(): return []
-    obj = read_json(p)
-    if isinstance(obj, dict) and isinstance(obj.get("alignments"), list):
-        return [x for x in obj["alignments"] if isinstance(x, dict)]
-    return []
-
-def collect_problem_evidence(prob: dict) -> List[EvidenceItem]:
-    out: List[EvidenceItem] = []
-    for ev in (prob.get("evidence") or []):
-        item = EvidenceItem.from_any(ev)
-        if item: out.append(item)
-    return out
-
-# ---------------------- Core synthesis ----------------------
-
-def build_event_for_issue(
-    issue_title: str,
-    issue_category: str,
-    aligned: List[dict],
-    pooled_evidence: List[EvidenceItem],
-    strict: str,
-    max_sources: int,
-) -> dict:
-    # pick stakeholder by category
-    stakeholder = STAKEHOLDER_DEFAULT.get(issue_category or "", "Executive Sponsor")
-
-    # pick 1–3 challenges
-    aligned_ch_names = []
-    align_strength = None
-    if aligned:
-        # prefer up to 3 strongest (Strong > Partial > Weak)
-        def strength_rank(a: dict) -> int:
-            s = (a.get("alignment_strength") or "").strip()
-            return {"Strong": 0, "Partial": 1, "Weak": 2}.get(s, 3)
-        chosen = sorted(aligned, key=strength_rank)[:3]
-        aligned_ch_names = [c.get("challenge") for c in chosen if c.get("challenge")]
-        if chosen:
-            align_strength = chosen[0].get("alignment_strength")
-
-    # evidence selection
-    # keep up to N, preferring newest
-    ev_sorted = sorted(
-        pooled_evidence,
-        key=lambda e: (parse_date_safe(e.date) or datetime(1970,1,1, tzinfo=timezone.utc)),
-        reverse=True,
+    base = (
+        0.5 * spec_ratio +     # most weight: how focused the evidence is
+        0.3 * recency_score +  # freshness matters
+        0.2 * density          # more evidence is still good
     )
-    chosen_ev = ev_sorted[:max_sources]
+    return round(max(0.0, min(1.0, base * strict_boost)), 2)
 
-    # newest age
-    newest_days = None
-    if chosen_ev:
-        newest_dt = parse_date_safe(chosen_ev[0].date)
-        if newest_dt:
-            newest_days = int((datetime.now(timezone.utc) - newest_dt).total_seconds() // 86400)
 
-    confidence = score_confidence(len(chosen_ev), newest_days, align_strength)
-    urgency = derive_urgency(newest_days)
+# ---------------------------------------------------------------------
+# JSON sanitization helper
+# ---------------------------------------------------------------------
 
-    # Messages (concise, exec)
-    if issue_category == "Risk":
-        event_message = (
-            f"As {issue_title} persists, gaps increase the probability of fines, outages, or data loss. "
-            "Standardizing controls and visibility now reduces audit friction and breach exposure."
-        )
-        risk_if_ignored = "Escalating likelihood of non-compliance, regulatory penalties, and incident-driven churn."
-        opportunity = "A unified control plane that simplifies compliance, shortens audits, and hardens defenses globally."
-    elif issue_category == "Growth":
-        event_message = (
-            f"{issue_title} is constraining scale velocity. Streamlining architecture unlocks faster market entry and higher win rates."
-        )
-        risk_if_ignored = "Integration delays, missed revenue windows, and competitive displacement."
-        opportunity = "Accelerated time-to-market via standard patterns and automation across regions."
-    elif issue_category == "Cost":
-        event_message = (
-            f"{issue_title} is inflating OpEx/CapEx. Addressing it now captures efficiency gains this fiscal year."
-        )
-        risk_if_ignored = "Budget overruns and margin erosion due to duplicated tools and manual work."
-        opportunity = "Lower run-rate via consolidation, policy reuse, and automation."
-    else:
-        event_message = f"{issue_title} is a priority; resolving it creates measurable business benefit this cycle."
-        risk_if_ignored = "Drift, rework, and value leakage."
-        opportunity = "Crisper execution and measurable outcomes tied to KPIs."
+def _sanitize_json_like(text: str) -> str:
+    """
+    Best-effort cleanup of LLM JSON-like output:
+    - Strips surrounding markdown fences (```).
+    - Replaces literal newlines inside JSON strings with spaces.
+    This helps when the model returns almost-JSON with line-wrapped strings.
+    """
+    if not text or not isinstance(text, str):
+        return text
 
-    # Sources block
-    sources = [
-        {"name": ev.source, "url": ev.url, "date": ev.date, "quote_or_note": ev.quote}
-        for ev in chosen_ev
+    t = text.strip()
+
+    # Strip leading/trailing markdown code fences if present.
+    if t.startswith("```"):
+        lines = t.splitlines()
+        if lines and lines[0].lstrip().startswith("```"):
+            lines = lines[1:]
+        if lines and lines[-1].rstrip().startswith("```"):
+            lines = lines[:-1]
+        t = "\n".join(lines)
+
+    cleaned_chars: list[str] = []
+    in_string = False
+    escape = False
+
+    for ch in t:
+        if escape:
+            cleaned_chars.append(ch)
+            escape = False
+            continue
+        if ch == "\\":
+            cleaned_chars.append(ch)
+            escape = True
+            continue
+        if ch == "\"":
+            cleaned_chars.append(ch)
+            in_string = not in_string
+            continue
+        if in_string and ch in ("\n", "\r"):
+            # Newlines inside JSON strings are illegal; normalize to space.
+            cleaned_chars.append(" ")
+            continue
+        cleaned_chars.append(ch)
+
+    return "".join(cleaned_chars)
+
+
+def _extract_first_json_obj(text: str) -> Optional[Dict[str, Any]]:
+    """
+    Best-effort extraction of the first top-level JSON object from a string.
+    This is used as a salvage path when the LLM returns almost-JSON with
+    extra text around it.
+    """
+    if not text or not isinstance(text, str):
+        return None
+
+    # First, sanitize obvious JSON issues (e.g., newlines inside strings).
+    text = _sanitize_json_like(text)
+
+    start = text.find("{")
+    while start != -1:
+        depth = 0
+        in_string = False
+        escape = False
+        for i, ch in enumerate(text[start:], start=start):
+            if escape:
+                escape = False
+            elif ch == "\\":
+                escape = True
+            elif ch == "\"":
+                in_string = not in_string
+            elif not in_string:
+                if ch == "{":
+                    depth += 1
+                elif ch == "}":
+                    depth -= 1
+                    if depth == 0:
+                        candidate = text[start : i + 1]
+                        try:
+                            return json.loads(candidate)
+                        except Exception:
+                            # Failed to parse, break inner loop and search for next {
+                            break
+        start = text.find("{", start + 1)
+    return None
+
+def _default_stakeholder_from_challenges(challenges: List[str]) -> str:
+    """
+    Very simple heuristic to pick a stakeholder if none is given.
+    You can refine this mapping as you learn more.
+    """
+    joined = " ".join(challenges).lower()
+    if any(k in joined for k in ("security", "breach", "hipaa", "gdpr", "iso 27001", "soc 2")):
+        return "CISO / VP Security"
+    if any(k in joined for k in ("compliance", "audit", "regulator")):
+        return "Chief Compliance Officer"
+    if any(k in joined for k in ("customer", "cx", "contact center", "service")):
+        return "Chief Customer Officer / VP, Customer Experience"
+    if any(k in joined for k in ("operations", "efficiency", "productivity")):
+        return "COO / VP, Operations"
+    if any(k in joined for k in ("cloud", "infrastructure", "it", "data center")):
+        return "CIO / VP, IT Infrastructure"
+    return "Executive Sponsor"
+
+
+# ---------------------------------------------------------------------
+# LLM call with Retry Logic
+# ---------------------------------------------------------------------
+
+_genai_client: Optional[genai.Client] = None
+
+def _ensure_genai_client() -> genai.Client:
+    """Return a google-genai Client configured for Vertex AI."""
+    global _genai_client
+    if _genai_client is not None:
+        return _genai_client
+
+    project = os.environ.get("GOOGLE_CLOUD_PROJECT") or os.environ.get("VERTEX_PROJECT")
+    if not project:
+        raise RuntimeError("GOOGLE_CLOUD_PROJECT is not set for Step 5.")
+
+    location = os.environ.get("GOOGLE_CLOUD_LOCATION", "global")
+
+    _genai_client = genai.Client(
+        vertexai=True,
+        project=project,
+        location=location,
+        http_options=HttpOptions(
+            api_version="v1",
+            headers={
+                "X-Vertex-AI-LLM-Request-Type": "dedicated",
+            },
+        ),
+    )
+    return _genai_client
+
+# --- RETRY HELPER FUNCTION ---
+def _is_rate_limit_error(exception: BaseException) -> bool:
+    """Checks if the exception is a ClientError with a 429 status code."""
+    # This checks the specific Google GenAI ClientError status code
+    return isinstance(exception, ClientError) and exception.status_code == 429
+# ---------------------------
+
+@retry(
+    # Stop after a max of 5 attempts
+    stop=stop_after_attempt(5),
+    # Wait 2^x seconds between retries (1, 2, 4, 8, 16 seconds)
+    wait=wait_exponential(multiplier=1, min=1, max=60),
+    # Only retry if the error is a 429 ClientError
+    retry=retry_if_exception_type(ClientError) & retry_if_exception(
+        _is_rate_limit_error
+    ),
+    # Print a warning before retrying
+    before_sleep=lambda retry_state: log.warning(
+        f"[step5] LLM call hit 429, retrying in {int(retry_state.next_action.sleep)}s (Attempt {retry_state.attempt_number} of 5)..."
+    ),
+    reraise=True # Re-raise the exception if retries are exhausted
+)
+def _llm_generate_compelling_events(
+    company: str,
+    alignments: List[Dict[str, Any]],
+    problems: List[Dict[str, Any]],
+    max_events: int,
+    temperature: float = 0.2,
+) -> List[Dict[str, Any]]:
+    """
+    Call the LLM ONCE with a compact JSON context and ask it to propose
+    compelling_events.
+    """
+    if not alignments:
+        return []
+
+    # Build a concise, issue-centric context the LLM can reason over.
+    problems_by_issue: Dict[str, List[Dict[str, Any]]] = {}
+    for p in problems or []:
+        if not isinstance(p, dict):
+            continue
+        issue_id = p.get("issue_id")
+        if not issue_id:
+            continue
+        problems_by_issue.setdefault(issue_id, []).append(p)
+
+    context_payload = {
+        "company_name": company,
+        "issues": [],
+    }
+
+    # Helper: summarize a single problem into a compact JSON-friendly structure
+    def summarize_problem(p: Dict[str, Any]) -> Dict[str, Any]:
+        evidences = _flatten_sources_from_problem(p)
+        snippets: List[str] = []
+        for ev in evidences[:3]:  # cap snippets per problem
+            if not isinstance(ev, dict):
+                continue
+            snippet = (ev.get("snippet") or ev.get("title") or "").strip()
+            if snippet:
+                snippets.append(snippet)
+        return {
+            "problem_id": p.get("id") or p.get("problem_id") or p.get("issue_id"),
+            "label": (p.get("label") or p.get("title") or "").strip(),
+            "summary": (p.get("summary") or p.get("description") or "").strip(),
+            "evidence_snippets": snippets,
+        }
+
+    for a in alignments:
+        if not isinstance(a, dict):
+            continue
+        issue_id = a.get("issue_id")
+        issue_problems = problems_by_issue.get(issue_id, [])
+        problem_summaries: List[Dict[str, Any]] = [
+            summarize_problem(p) for p in issue_problems[:3]  # cap problems per issue
+        ]
+
+        issue_ctx = {
+            "issue_id": issue_id,
+            "issue_title": a.get("issue_title") or a.get("issue_label") or "",
+            "aligned_challenges": a.get("aligned_challenges", []),
+            "evidence_summary": a.get("evidence_summary") or "",
+            "evidence_stats": a.get("evidence_stats") or {},
+            # Compact view of upstream problems and their evidence.
+            "problems": problem_summaries,
+            # Raw alignment is included so the model can see any additional fields
+            "raw_alignment": a,
+        }
+        context_payload["issues"].append(issue_ctx)
+
+    system_instructions = (
+        "You are a senior enterprise seller.\n"
+        "You are given JSON describing issues that have been aligned to campaign challenges for a single target account. "
+        "Each issue may include upstream problems and short evidence snippets from public signals.\n\n"
+        "Your job is to propose 3–6 crisp, account-specific compelling events that a seller could actually use in outreach.\n\n"
+        "CRITICAL JSON RULES:\n"
+        "- You MUST return exactly ONE valid JSON object.\n"
+        "- The top-level object MUST have a `compelling_events` key whose value is a list.\n"
+        "- Do NOT include any text before or after the JSON object. No explanations, no prose.\n"
+        "- Do NOT include comments.\n"
+        "- Do NOT insert raw newline characters inside JSON string values; keep each string on a single line, or use \\n if you must break a line.\n"
+        "- Do NOT truncate string values; always close string quotes and all brackets/braces.\n\n"
+        "Each compelling event MUST:\n"
+        "- Be grounded in the issues, problems, evidence_snippets, and aligned challenges you see in the JSON context.\n"
+        "- Sound like the *reason to talk now* for this specific account, not a generic industry statement.\n"
+        "- Be written in natural language, not bullet fragments.\n"
+        "- Avoid generic filler like 'Drift, rework, and value leakage'.\n"
+        "- Avoid canned consulting-style headlines like 'Aggressive Expansion Risks a Fragmented Operating Posture' "
+        "or similar; instead, write plainly in the customer's language.\n"
+    )
+
+    user_prompt = (
+        "Return ONLY valid JSON. No markdown, no surrounding prose.\n"
+        "If you are unsure what to return, respond with {\"compelling_events\": []}.\n\n"
+        "Respond with an object with this structure and concrete values:\n"
+        "{\n"
+        "  \"compelling_events\": [\n"
+        "    {\n"
+        "      \"issue_title\": \"short, human-readable summary of the issue in the customer's language\",\n"
+        "      \"stakeholder\": \"primary executive or VP who owns this issue (e.g., CIO, CISO, COO)\",\n"
+        "      \"event_message\": \"one or two natural-language sentences that clearly describe why this issue is a reason to act now for this specific account\",\n"
+        "      \"risk_if_ignored\": \"what bad outcomes are likely if the customer does nothing in the next 12-24 months\",\n"
+        "      \"urgency_trigger\": \"what upcoming event, milestone, or trend should make this urgent in the next 1-3 quarters\",\n"
+        "      \"opportunity_if_addressed\": \"what upside or strategic advantage the customer captures if they address this issue\",\n"
+        "      \"aligned_challenges\": [\"one_or_more_campaign_challenge_keys_here\"]\n"
+        "    }\n"
+        "  ]\n"
+        "}\n\n"
+        f"Company: {company}\n"
+        "You are given a JSON context object (in a separate message part) with a `company_name` and an `issues` list. "
+        "Each issue includes aligned campaign challenges, optional problems, and evidence_snippets summarizing public signals.\n"
+        "Use those issues, problems, and evidence_snippets to make each event specific and realistic for this account.\n"
+        f"Cap the output at {max_events} compelling_events."
+    )
+
+    client = _ensure_genai_client()
+
+    temp_env = os.getenv("TA_STEP5_TEMPERATURE") or os.getenv("STEP5_TEMPERATURE")
+    max_tokens_env = os.getenv("TA_STEP5_MAX_OUTPUT_TOKENS") or os.getenv("STEP5_MAX_OUTPUT_TOKENS")
+    try:
+        temp_val = float(temp_env) if temp_env is not None else temperature
+    except ValueError:
+        temp_val = temperature
+    try:
+        max_output_tokens = int(max_tokens_env) if max_tokens_env is not None else 4096
+    except ValueError:
+        max_output_tokens = 4096
+
+    # Combine the JSON context and user instructions into a single user message.
+    contents = [
+        {
+            "role": "user",
+            "parts": [
+                {"text": json.dumps(context_payload, ensure_ascii=False)},
+                {"text": user_prompt},
+            ],
+        }
     ]
 
-    return {
-        "issue_title": issue_title,
-        "aligned_challenges": aligned_ch_names,
-        "event_message": event_message,
-        "stakeholder": stakeholder,
-        "urgency_trigger": (
-            "Recent signals and alignment indicate an active, funded initiative requiring standardization now."
-            if newest_days is not None else
-            "Active initiative signaled; timing window likely this planning cycle."
-        ),
-        "risk_if_ignored": risk_if_ignored,
-        "opportunity_if_addressed": opportunity,
-        "confidence": round(confidence, 2),
-        "sources": sources
-    }
+    config = genai_types.GenerateContentConfig(
+        system_instruction=system_instructions,
+        temperature=temp_val,
+        max_output_tokens=max_output_tokens,
+        response_mime_type="application/json",
+    )
 
-def synthesize_events(
-    step2_problems: List[dict],
-    step3_alignments: List[dict],
-    extra_ev: List[dict],
-    strict: str,
-    max_sources: int,
-) -> Dict[str, Any]:
-    # Build a lookup from problem title -> problem (for evidence)
-    prob_by_title = { (p.get("title") or "").strip(): p for p in step2_problems if isinstance(p, dict) }
+    # API CALL WITH RETRY
+    resp = client.models.generate_content(
+        model=os.getenv("STEP5_MODEL", "gemini-2.5-pro"),
+        contents=contents,
+        config=config,
+    )
 
-    # Pool extra evidence
-    pooled_extra: List[EvidenceItem] = []
-    for d in extra_ev or []:
-        item = EvidenceItem.from_any(d)
-        if item: pooled_extra.append(item)
+    try:
+        raw = getattr(resp, "text", None)
+        if not raw and getattr(resp, "candidates", None):
+            first = resp.candidates[0]
+            if getattr(first, "content", None) and first.content.parts:
+                raw = first.content.parts[0].text
+        if not raw:
+            log.warning("[step5] LLM returned empty response text")
+            return []
 
-    events_out: List[dict] = []
+        # Log full raw LLM output for debugging.
+        log.warning("[step5] RAW LLM OUTPUT:\n%s", raw)
 
-    if step3_alignments:
-        for a in step3_alignments:
-            title = (a.get("issue_title") or "").strip()
-            category = (a.get("issue_category") or "Unknown").strip()
-            aligned = a.get("aligned_challenges") or []
+        try:
+            sanitized = _sanitize_json_like(raw)
+            parsed = json.loads(sanitized)
+        except json.JSONDecodeError as e:
+            log.warning("[step5] LLM JSON parse error (strict): %s", e)
+            parsed = _extract_first_json_obj(raw)
+            if parsed is None:
+                return []
 
-            # gather evidence from the matching Step 2 problem
-            prob = prob_by_title.get(title)
-            ev_from_prob = collect_problem_evidence(prob) if prob else []
+        # Handle a few common shapes:
+        # 1) Top-level object with "compelling_events"
+        # 2) Top-level list of events (wrap into an object)
+        if isinstance(parsed, list):
+            events = parsed
+        elif isinstance(parsed, dict):
+            events = parsed.get("compelling_events", [])
+        else:
+            events = []
 
-            # combine with extra evidence
-            pooled = ev_from_prob + pooled_extra
+        if not isinstance(events, list):
+            # Sometimes the extracted object is a dict containing a nested list under a slightly different key;
+            # in that case, bail out rather than guessing.
+            return []
 
-            # If strict=high and pooled is empty → still emit but sources=[]
-            event = build_event_for_issue(
-                issue_title=title or "Unspecified Issue",
-                issue_category=category or "Unknown",
-                aligned=aligned if isinstance(aligned, list) else [],
-                pooled_evidence=pooled,
-                strict=strict,
-                max_sources=max_sources,
-            )
-            events_out.append(event)
-    else:
-        # No Step 3 given — synthesize events directly from Step 2 problems
-        for p in step2_problems:
-            title = (p.get("title") or "Unspecified Issue").strip()
-            category = (p.get("category") or "Unknown").strip()
-            ev = collect_problem_evidence(p) + pooled_extra
-            event = build_event_for_issue(
-                issue_title=title,
-                issue_category=category,
-                aligned=[],
-                pooled_evidence=ev,
-                strict=strict,
-                max_sources=max_sources,
-            )
-            events_out.append(event)
-
-    return {
-        "generated_at": now_iso(),
-        "compelling_events": events_out
-    }
+        return [e for e in events if isinstance(e, dict)]
+    except Exception as e:
+        # If any non-ClientError parsing or data handling fails, log and return empty.
+        log.warning("[step5] LLM JSON handling failed: %s: %s", type(e).__name__, e)
+        return []
 
 
-# ---------------------- In-process callable for orchestrator ----------------------
+# ---------------------------------------------------------------------
+# Core API
+# ---------------------------------------------------------------------
 
 def run_step(
     *,
-    problems: List[dict] | None,
-    alignments: List[dict] | None,
-    extra_evidence: List[dict] | None,
+    problems: List[Dict[str, Any]],
+    alignments: List[Dict[str, Any]],
+    extra_evidence: Optional[List[Dict[str, Any]]] = None,
     strict: str = "medium",
     max_sources: int = 3,
-    company: Optional[str] = None,
+    company: str = "Unknown Company",
 ) -> Dict[str, Any]:
-    """Run Step 5 fully in-process.
-
-    Parameters mirror the synthesized inputs produced by prior steps when called
-    from run.py. This avoids subprocess + disk I/O while preserving output shape.
     """
-    # Normalize extra evidence into a uniform dict shape (same as CLI path)
-    extra_norm: List[dict] = []
-    for d in (extra_evidence or []):
-        item = EvidenceItem.from_any(d)
-        if item:
-            extra_norm.append({
-                "source": item.source,
-                "url_or_id": item.url,
-                "date": item.date,
-                "quote_or_note": item.quote,
-            })
+    Main entrypoint used from run.py
 
-    payload = synthesize_events(
-        step2_problems=problems or [],
-        step3_alignments=alignments or [],
-        extra_ev=extra_norm,
-        strict=strict,
-        max_sources=max_sources,
-    )
+    - Uses alignments from Step 4 as the backbone.
+    - Uses problems from Step 2 as the evidence reservoir.
+    - Calls LLM once to generate human text for each event.
+    - Post-processes with deterministic scoring + evidence_stats.
+    """
 
-    if company:
-        payload = {"company": company, **payload}
+    extra_evidence = extra_evidence or []
+    problems = [p for p in (problems or []) if isinstance(p, dict)]
+    alignments = [a for a in (alignments or []) if isinstance(a, dict)]
 
-    return payload
+    log.info(f"[step5] run_step company={company!r} alignments={len(alignments)} problems={len(problems)}")
 
-# ---------------------- Markdown rendering ----------------------
+    if not alignments:
+        return {
+            "step": "compelling_events",
+            "company_name": company,
+            "generated_at": _now_iso(),
+            "compelling_events": [],
+        }
 
-def render_markdown(company: str, payload: Dict[str, Any]) -> str:
-    lines: List[str] = []
-    lines.append(f"# Compelling Events — {company}")
-    lines.append(f"_Generated at: {payload.get('generated_at')}_")
-    lines.append("")
-    for ev in payload.get("compelling_events", []):
-        lines.append(f"## {ev.get('issue_title','(untitled)')}")
-        if ev.get("aligned_challenges"):
-            lines.append("**Aligned challenges:** " + ", ".join(ev["aligned_challenges"]))
-        lines.append("")
-        lines.append(ev.get("event_message","").strip())
-        lines.append("")
-        lines.append(f"- **Stakeholder:** {ev.get('stakeholder','')}")
-        u = ev.get("urgency_trigger") or ""
-        lines.append(f"- **Urgency trigger:** {u}")
-        lines.append(f"- **Risk if ignored:** {ev.get('risk_if_ignored','')}")
-        lines.append(f"- **Opportunity if addressed:** {ev.get('opportunity_if_addressed','')}")
-        lines.append(f"- **Confidence:** {ev.get('confidence',0):.2f}")
-        lines.append("")
-        srcs = ev.get("sources") or []
-        if srcs:
-            lines.append("**Sources & Citations**")
-            for s in srcs:
-                name = s.get("name") or "Source"
-                url = s.get("url") or ""
-                date = s.get("date") or ""
-                note = s.get("quote_or_note") or ""
-                if is_http(url):
-                    lines.append(f"- [{name}]({url}) — {note} ({date})")
-            lines.append("")
-        else:
-            lines.append("**Sources & Citations:** None (no verifiable URLs in inputs)\n")
-    return "\n".join(lines)
+    # 1) Ask LLM to draft event text based purely on alignments + challenges
+    #    (no confidence or source wiring yet)
+    max_events = min(max(len(alignments) * 2, 3), 8)
 
-# ---------------------- CLI ----------------------
+    try:
+        llm_events = _llm_generate_compelling_events(
+            company=company,
+            alignments=alignments,
+            problems=problems,
+            max_events=max_events,
+            temperature=float(os.getenv("STEP5_TEMPERATURE", "0.4")),
+        )
+    except ClientError as e:
+        # This catches ClientError (including 429) after all retries have failed
+        log.error(f"[step5] LLM generation failed after retries (API Error): {e}")
+        llm_events = []
+    except Exception as e:
+        log.error(f"[step5] LLM generation failed due to unexpected error: {e}")
+        llm_events = []
 
-def main():
-    ap = argparse.ArgumentParser(description="Step 5 — Compelling Events")
-    ap.add_argument("--issues", type=str, help="Path to Step 2 JSON (problems) or Step 3 JSON if problems embedded")
-    ap.add_argument("--alignments", type=str, help="Path to Step 3 JSON (alignments)", default=None)
-    ap.add_argument("--evidence", type=str, help="Optional extra evidence JSON/NDJSON", default=None)
-    ap.add_argument("--company", type=str, help="Override company name", default=None)
-    ap.add_argument("--out-json", type=str, required=False, help="Output JSON path")
-    ap.add_argument("--out-md", type=str, help="Optional Markdown output path", default=None)
-    ap.add_argument("--max-sources", type=int, default=int(os.getenv("STEP5_MAX_SOURCES", "3")))
-    ap.add_argument("--strict", choices=["high","medium","low"], default=os.getenv("STEP5_STRICT","medium"))
-    ap.add_argument("--session-dir", type=str, help="Session directory for orchestrated runs", default=None)
-    ap.add_argument("--emit-md", action="store_true", help="If set, write Markdown alongside JSON (session default path if out-md not provided)")
-    args = ap.parse_args()
+    # If the LLM did not return any compelling_events, emit a diagnostic meta-event
+    # instead of an empty list so callers can see that the gap is a signal, not a bug.
+    if not llm_events:
+        log.info(
+            "[step5] LLM returned 0 compelling_events; emitting diagnostic meta-event "
+            "to indicate weak campaign–account alignment or LLM failure."
+        )
+        diagnostic_event = {
+            "issue_title": "No strong campaign-aligned compelling events detected",
+            "stakeholder": "Executive Sponsor",
+            "event_message": (
+                "Based on the current issues and campaign taxonomy, no strong, campaign-aligned "
+                "compelling events were detected for this account. This likely indicates a weak "
+                "fit between the campaign focus and the account's most visible public challenges "
+                "or an upstream LLM failure. Check logs for API errors."
+            ),
+            "risk_if_ignored": (
+                "Continuing to invest effort in this campaign for this account without revisiting "
+                "the value hypothesis may lead to low response rates and wasted seller cycles."
+            ),
+            "urgency_trigger": (
+                "Treat this as a trigger to re-evaluate whether this account belongs in the current "
+                "campaign or whether the campaign challenge taxonomy needs to be updated to reflect "
+                "real-world signals."
+            ),
+            "opportunity_if_addressed": (
+                "By tightening campaign–account fit or updating the challenge taxonomy, you can focus "
+                "effort where external signals show clearer pain or opportunity."
+            ),
+            "aligned_challenges": [],
+        }
+        llm_events = [diagnostic_event]
 
-    session_dir = Path(args.session_dir).resolve() if args.session_dir else None
+    # 2) For each LLM event, attach evidence and scoring
+    compelling_events: List[Dict[str, Any]] = []
+    for raw_ev in llm_events:
+        issue_title = (raw_ev.get("issue_title") or "").strip()
+        aligned_challenges = raw_ev.get("aligned_challenges") or []
 
-    # Resolve inputs/outputs using session defaults if session_dir is provided
-    issues_path = Path(args.issues) if args.issues else None
-    aligns_path = Path(args.alignments) if args.alignments else None
-    ev_path = Path(args.evidence) if args.evidence else None
-    out_json = Path(args.out_json) if args.out_json else None
-    out_md = Path(args.out_md) if args.out_md else None
+        # Find the best matching alignment by title overlap
+        best_align: Optional[Dict[str, Any]] = None
+        best_score = 0.0
+        for a in alignments:
+            atitle = (a.get("issue_title") or a.get("issue_label") or "").strip()
+            if not atitle:
+                continue
+            overlap = len(set(issue_title.lower().split()) & set(atitle.lower().split()))
+            if overlap > best_score:
+                best_score = overlap
+                best_align = a
 
-    if session_dir:
-        if not issues_path:
-            issues_path = session_dir / "problems.step2.json"
-        if not aligns_path:
-            aligns_path = session_dir / "alignments.step4.json"
-        if not ev_path:
-            ev_path = first_existing(
-                session_dir / "evidence.step1.5.ndjson",
-                session_dir / "evidence.step1.5.json",
-                session_dir / "web_evidence.step1.ndjson",
-                session_dir / "web_evidence.step1.json",
+        issue_id = best_align.get("issue_id") if best_align else None
+        # Evidence: all problem evidence tied to this issue_id
+        issue_evidence = _collect_issue_evidence(problems, issue_id=issue_id)
+
+        # Optionally mix in a few extra web events (if they’ve been normalized with issue_id)
+        # For now, we treat extra_evidence as global and rely on problems for specificity.
+        sources = _merge_sources(issue_evidence, [], max_total=max_sources)
+
+        total_sources = len(sources)
+        # Use issue_specific_sources calculation from best_align if available, otherwise default to total
+        if best_align and isinstance(best_align, dict):
+            issue_specific_sources = (
+                best_align.get("evidence_stats", {}).get("issue_specific_sources")
             )
-        if not out_json:
-            out_json = session_dir / "compelling_events.step5.json"
-        if (args.emit_md or out_md) and not out_md:
-            out_md = session_dir / "compelling_events.step5.md"
+        else:
+            issue_specific_sources = None
+        if issue_specific_sources is None:
+             issue_specific_sources = len(issue_evidence) if issue_evidence else total_sources
 
-    if not out_json:
-        ap.error("--out-json is required unless --session-dir is provided (which supplies a default path).")
+        recency_score = _score_evidence_recency(sources)
+        confidence = _score_confidence(
+            issue_specific_sources=issue_specific_sources,
+            total_sources=total_sources,
+            recency_score=recency_score,
+            strict_level=strict,
+        )
 
-    # Load inputs
-    step2_problems = load_step2_problems(issues_path)
-    step3_alignments = load_step3_alignments(aligns_path)
-    extra_ev_raw = read_json_or_ndjson_list(ev_path)
+        # Stakeholder guess if LLM didn’t give a good one
+        stakeholder = (raw_ev.get("stakeholder") or "").strip()
+        if not stakeholder:
+            stakeholder = _default_stakeholder_from_challenges(aligned_challenges)
 
-    # Company inference
-    company = args.company or "Unknown Company"
-    # Try to infer from Step 2 or Step 3
-    try:
-        if issues_path and issues_path.exists():
-            o = read_json(issues_path)
-            company = o.get("company", company)
-        if aligns_path and aligns_path.exists():
-            o = read_json(aligns_path)
-            company = o.get("company", company)
-    except Exception:
-        pass
+        compelling_events.append(
+            {
+                "sources": sources,
+                "confidence": confidence,
+                "issue_title": issue_title or (best_align.get("issue_title") if best_align else ""),
+                "stakeholder": stakeholder,
+                "event_message": (raw_ev.get("event_message") or "").strip(),
+                "risk_if_ignored": (raw_ev.get("risk_if_ignored") or "").strip(),
+                "urgency_trigger": (raw_ev.get("urgency_trigger") or "").strip(),
+                "opportunity_if_addressed": (raw_ev.get("opportunity_if_addressed") or "").strip(),
+                "aligned_challenges": aligned_challenges or (best_align.get("aligned_challenges") if best_align else []),
+                "evidence_stats": {
+                    "total_sources": total_sources,
+                    "issue_specific_sources": issue_specific_sources,
+                },
+            }
+        )
 
-    # Normalize extra evidence
-    extra_evidence: List[dict] = []
-    for d in extra_ev_raw:
-        item = EvidenceItem.from_any(d)
-        if item:
-            extra_evidence.append({
-                "source": item.source, "url_or_id": item.url, "date": item.date, "quote_or_note": item.quote
-            })
+    # 3) Sort events by confidence descending and truncate if we got too many
+    compelling_events.sort(key=lambda e: e.get("confidence", 0.0), reverse=True)
 
-    # Synthesize
-    payload = synthesize_events(
-        step2_problems=step2_problems,
-        step3_alignments=step3_alignments,
-        extra_ev=extra_evidence,
-        strict=args.strict,
-        max_sources=args.max_sources,
-    )
-    # Attach company
-    payload = {"company": company, **payload}
+    max_final = int(os.getenv("STEP5_MAX_EVENTS", "6"))
+    compelling_events = compelling_events[:max_final]
 
-    # Write JSON
-    out_json.parent.mkdir(parents=True, exist_ok=True)
-    out_json.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
+    return {
+        "step": "compelling_events",
+        "company_name": company,
+        "generated_at": _now_iso(),
+        "compelling_events": compelling_events,
+    }
 
-    # Optional MD
-    if out_md:
-        out_md.parent.mkdir(parents=True, exist_ok=True)
-        out_md.write_text(render_markdown(company, payload), encoding="utf-8")
-
-    print(f"[step5] Wrote JSON: {out_json}")
-    if out_md:
-        print(f"[step5] Wrote Markdown: {out_md}")
-
-    # Orchestrator markers
-    abs_json = make_abs(out_json)
-    if abs_json:
-        print(f"__STEP5_JSON_PATH__:{abs_json}")
-    if out_md:
-        abs_md = make_abs(out_md)
-        if abs_md:
-            print(f"__STEP5_MD_PATH__:{abs_md}")
-    try:
-        count = len(payload.get("compelling_events", []))
-    except Exception:
-        count = 0
-    print(f"__STEP5_EVENT_COUNT__:{count}")
 
 if __name__ == "__main__":
-    main()
+    # Simple CLI wrapper for testing
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Step 5 – Compelling Events")
+    # Support both new and legacy flags:
+    parser.add_argument(
+        "--problems",
+        help="Path to Step 2 problems JSON (preferred; alias of --issues)",
+    )
+    parser.add_argument(
+        "--issues",
+        help="Legacy: path to Step 2 problems JSON (alias of --problems)",
+    )
+    parser.add_argument("--alignments", required=True, help="Path to Step 4 alignments JSON")
+    parser.add_argument("--evidence", help="Optional path to Step 1 evidence JSON")
+    parser.add_argument("--company", default="Unknown Company")
+    parser.add_argument("--strict", default="medium")
+    parser.add_argument("--max-sources", type=int, default=3)
+    parser.add_argument("--out-json", required=True)
+    args = parser.parse_args()
+
+    # Backward-compatible resolution of the problems/issues path
+    problems_path = args.problems or args.issues
+    if not problems_path:
+        raise SystemExit("ERROR: You must provide either --problems or --issues pointing to Step 2 output JSON.")
+
+    with open(problems_path, "r", encoding="utf-8") as fh:
+        problems_obj = json.load(fh)
+
+    with open(args.alignments, "r", encoding="utf-8") as fh:
+        align_obj = json.load(fh)
+    evidence_obj = []
+    if args.evidence:
+        try:
+            with open(args.evidence, "r", encoding="utf-8") as fh:
+                evidence_obj = json.load(fh)
+        except Exception:
+            evidence_obj = []
+
+    # step2/4 wrappers: they usually store under top-level keys
+    problems_list = problems_obj.get("problems", problems_obj) if isinstance(problems_obj, dict) else problems_obj
+    align_list = align_obj.get("alignments", align_obj) if isinstance(align_obj, dict) else align_obj
+    ev_list = evidence_obj if isinstance(evidence_obj, list) else evidence_obj.get("results", [])
+
+    out = run_step(
+        problems=problems_list,
+        alignments=align_list,
+        extra_evidence=ev_list,
+        strict=args.strict,
+        max_sources=args.max_sources,
+        company=args.company,
+    )
+
+    with open(args.out_json, "w", encoding="utf-8") as fh:
+        json.dump(out, fh, indent=2, ensure_ascii=False)
+
+    # Human-readable log to stderr
+    print(f"[Step 5] Wrote compelling events JSON \u2192 {args.out_json}", file=sys.stderr)
+
+    # Machine-readable markers for orchestrators (stdout)
+    print(f"__STEP5_JSON_PATH__:{args.out_json}")
+    print(f"__STEP5_EVENT_COUNT__:{len(out.get('compelling_events') or [])}")

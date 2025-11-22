@@ -210,6 +210,47 @@ async def _process_one_target_account(campaign_id: str, target_account_id: str, 
             merged_payload.setdefault("mapping_insights", [])
             merged_payload.setdefault("campaign_challenges", [])
 
+            # NEW: Promote campaign-level config from campaign record into env vars / payload
+            try:
+                campaign_rows = merged_payload.get("campaign") or []
+                if isinstance(campaign_rows, list) and campaign_rows:
+                    camp0 = campaign_rows[0] or {}
+                    logging.info("[GCF] Campaign row keys: %s", list(camp0.keys()))
+                    # If there is an embedded JSON settings blob, prefer that
+                    settings_obj = camp0.get("settings") if isinstance(camp0.get("settings"), dict) else None
+                    cfg = settings_obj or camp0
+
+                    # Map common config keys from the campaign record to env vars
+                    key_mapping = [
+                        ("web_query_pack", "WEB_QUERY_PACK"),
+                        ("evidence_strictness", "EVIDENCE_STRICTNESS"),
+                        ("web_max_results", "WEB_MAX_RESULTS"),
+                        # Step 1 external search configuration
+                        ("ta_step1_external_provisioned_qpm", "TA_STEP1_EXTERNAL_PROVISIONED_QPM"),
+                        ("ta_step1_external_safety_margin", "TA_STEP1_EXTERNAL_SAFETY_MARGIN"),
+                        ("ta_step1_external_concurrency", "TA_STEP1_EXTERNAL_CONCURRENCY"),
+                        ("ta_step1_temperature", "TA_STEP1_TEMPERATURE"),
+                        ("ta_step1_max_output_tokens", "TA_STEP1_MAX_OUTPUT_TOKENS"),
+                        ("ta_step3_temperature", "TA_STEP3_TEMPERATURE"),
+                        ("ta_step3_max_output_tokens", "TA_STEP3_MAX_OUTPUT_TOKENS"),
+                        ("ta_step5_temperature", "TA_STEP5_TEMPERATURE"),
+                        ("ta_step5_max_output_tokens", "TA_STEP5_MAX_OUTPUT_TOKENS"),
+                    ]
+                    for json_key, env_name in key_mapping:
+                        if json_key in cfg and cfg[json_key] not in (None, ""):
+                            os.environ[env_name] = str(cfg[json_key])
+                            logging.info(
+                                "[GCF] Campaign config: %s=%r (from campaign.%s)",
+                                env_name,
+                                cfg[json_key],
+                                json_key,
+                            )
+
+                    # Also expose the resolved campaign config blob to the executor via inputs.ndjson
+                    merged_payload["campaign_config"] = cfg
+            except Exception:
+                logging.exception("[GCF] Failed to promote campaign-level config to environment/payload")
+
             # Ensure IDs are embedded for the executor (run.py) and any downstream readers
             merged_payload["campaign_id"] = campaign_id
             merged_payload["target_account_id"] = target_account_id

@@ -1,0 +1,173 @@
+{
+  "version": "3",
+  "description": "Merged general-purpose + issue-focused web query pack for discovery, risk signals, operational failures, and corporate insights for {{company}}.",
+  "defaults": {
+    "recency_days": 540,
+    "max_results": 12
+  },
+  "categories": [
+    {
+      "name": "Corporate & Official Sources",
+      "queries": [
+        "(site:{{domain}} OR site:news.{{domain}} OR site:newsroom.{{domain}} OR site:media.{{domain}} OR site:press.{{domain}}) (news OR newsroom OR press OR media OR announcements OR updates)",
+        "(site:{{domain}} OR site:investors.{{domain}} OR site:ir.{{domain}}) (investor OR investors OR IR OR \"10-K\" OR 10Q OR \"10-Q\" OR \"annual report\" OR earnings OR presentations OR events)",
+        "site:{{domain}} (blog OR insights OR updates) -careers -jobs"
+      ]
+    },
+    {
+      "name": "Financial Filings & Capital Markets",
+      "queries": [
+        "\"{{company}}\" site:sec.gov (8-K OR 10-K OR 10-Q OR \"current report\" OR \"earnings call\")",
+        "\"{{company}}\" (\"credit facility\" OR refinancing OR \"notes offering\" OR debt OR financing) (site:investors.{{domain}} OR site:ir.{{domain}} OR site:sec.gov)"
+      ]
+    },
+    {
+      "name": "Jobs & Hiring Signals",
+      "queries": [
+        "(site:{{domain}} OR site:careers.{{domain}}) (careers OR jobs OR \"we're hiring\" OR openings)",
+        "site:linkedin.com/jobs {{company}} (engineer OR manager OR director OR analyst OR compliance OR security OR SRE OR \"data center\")",
+        "site:indeed.com {{company}} (security OR compliance OR analyst OR developer OR \"data center\")",
+        "site:myworkdayjobs.com {{company}}",
+        "site:greenhouse.io {{company}}",
+        "site:boards.greenhouse.io {{company}}",
+        "site:jobs.lever.co {{company}}",
+        "site:lever.co {{company}}"
+      ]
+    },
+    {
+      "name": "Market, News & Analyst Reports",
+      "queries": [
+        "\"{{company}}\" (announces OR launches OR partnership OR investment OR acquisition OR funding OR recall)",
+        "\"{{company}}\" (analyst OR report OR coverage OR forecast OR rating)",
+        "\"{{company}}\" (earnings OR \"quarterly results\" OR profit OR loss OR growth)",
+        "\"{{company}}\" site:reuters.com (news OR business)",
+        "\"{{company}}\" site:bloomberg.com",
+        "\"{{company}}\" (press release) (site:businesswire.com OR site:prnewswire.com OR site:globenewswire.com)"
+      ]
+    },
+    {
+      "name": "Risk, Compliance & Security",
+      "queries": [
+        "\"{{company}}\" (breach OR incident OR outage OR vulnerability OR recall OR \"regulatory action\")",
+        "\"{{company}}\" (compliance OR audit OR fine OR sanction OR GDPR OR \"SOC 2\" OR \"ISO 27001\" OR DORA OR NIS2)",
+        "\"{{company}}\" (lawsuit OR investigation OR fraud OR whistleblower)",
+        "\"{{company}}\" (cybersecurity OR ransomware OR exfiltration OR \"data loss\")",
+        "\"{{company}}\" (regulator OR enforcement) (site:ftc.gov OR site:sec.gov OR site:ico.org.uk OR site:cnil.fr)"
+      ]
+    },
+    {
+      "name": "Technology & Operations (General)",
+      "queries": [
+        "\"{{company}}\" (cloud OR migration OR \"legacy systems\" OR \"data platform\" OR \"AI initiative\" OR SASE OR \"Zero Trust\")",
+        "\"{{company}}\" (supply chain OR manufacturing OR logistics OR \"operational delay\")",
+        "\"{{company}}\" (efficiency OR automation OR modernization)"
+      ]
+    },
+    {
+      "name": "Technology & Operations (Data Center / AI)",
+      "queries": [
+        "\"{{company}}\" (colocation OR interconnection OR \"data center\" OR IBX OR \"xScale\" OR \"Equinix Metal\" OR \"Fabric\")",
+        "\"{{company}}\" (GPU OR NVIDIA OR AI OR \"H100\" OR \"B200\" OR \"AI cluster\" OR \"high density\")",
+        "\"{{company}}\" (\"liquid cooling\" OR immersion OR \"direct-to-chip\" OR cooling)",
+        "\"{{company}}\" (power OR PUE OR \"power usage effectiveness\" OR megawatt OR MW OR substation OR capacity)"
+      ]
+    },
+    {
+      "name": "Sustainability & Energy",
+      "queries": [
+        "\"{{company}}\" (renewable OR PPA OR \"power purchase agreement\" OR solar OR wind OR geothermal OR \"clean energy\")",
+        "\"{{company}}\" (emissions OR \"scope 1\" OR \"scope 2\" OR \"scope 3\" OR SBTi OR \"science-based targets\")",
+        "\"{{company}}\" (PUE OR efficiency OR \"energy efficiency\") (site:{{domain}} OR site:investors.{{domain}})"
+      ]
+    },
+    {
+      "name": "Customer & Product",
+      "queries": [
+        "\"{{company}}\" (case study OR \"customer story\" OR testimonial OR reference)",
+        "\"{{company}}\" (RFP OR RFI OR tender)",
+        "\"{{company}}\" (product OR platform OR portfolio OR roadmap OR deprecate OR \"end-of-life\" OR EOL)",
+        "\"{{company}}\" (launch OR update OR version OR feature)"
+      ]
+    },
+    {
+      "name": "M&A, Geography & Expansion",
+      "queries": [
+        "\"{{company}}\" (acquires OR acquisition OR acquired OR divests OR spin-off)",
+        "\"{{company}}\" (opens OR opening OR expands OR expansion OR greenfield OR brownfield OR campus) (\"data center\" OR IBX OR facility OR region OR country)",
+        "\"{{company}}\" (joint venture OR JV OR partnership) (xScale OR GIC OR PGIM OR Blackstone OR Brookfield)"
+      ]
+    },
+    {
+      "name": "Legal, Regulatory & Enforcement (High Signal)",
+      "queries": [
+        "\"{{company}}\" (lawsuit OR litigation OR sued OR settlement OR class-action OR subpoena OR indictment)",
+        "\"{{company}}\" (investigation OR regulator OR enforcement OR violation)",
+        "\"{{company}}\" (FTC OR SEC OR DOJ OR CFPB OR FCA OR CNIL OR ICO OR FINRA) (action OR penalty OR ruling OR charge)",
+        "\"{{company}}\" (fraud OR misconduct OR bribery OR corruption OR whistleblower)"
+      ]
+    },
+    {
+      "name": "Cybersecurity, Breaches & Data Loss (High Signal)",
+      "queries": [
+        "\"{{company}}\" (breach OR \"data breach\" OR ransomware OR \"cyber attack\" OR \"security incident\")",
+        "\"{{company}}\" (malware OR exploit OR compromised OR exfiltration OR \"data leak\")",
+        "\"{{company}}\" (outage OR downtime OR \"systems down\" OR \"unplanned outage\")",
+        "\"{{company}}\" (GDPR OR \"data protection\" OR \"privacy violation\")"
+      ]
+    },
+    {
+      "name": "Financial Distress & Weakness Signals (High Signal)",
+      "queries": [
+        "\"{{company}}\" (layoffs OR \"job cuts\" OR restructuring OR downsizing)",
+        "\"{{company}}\" (bankruptcy OR insolvent OR insolvency OR foreclosure OR default)",
+        "\"{{company}}\" (missed earnings OR \"profit warning\" OR \"guidance cut\")",
+        "\"{{company}}\" (downgrade OR \"credit rating\" OR \"debt crisis\")"
+      ]
+    },
+    {
+      "name": "Operational Failures & Supply Chain (High Signal)",
+      "queries": [
+        "\"{{company}}\" (shutdown OR fire OR explosion OR accident OR collapse)",
+        "\"{{company}}\" (recall OR defect OR \"product failure\" OR \"quality issue\")",
+        "\"{{company}}\" (operational delay OR bottleneck OR disruption OR shortage)",
+        "\"{{company}}\" (supplier dispute OR manufacturing issue OR supply chain problem)"
+      ]
+    },
+    {
+      "name": "Customer Complaints & Product Issues (High Signal)",
+      "queries": [
+        "\"{{company}}\" (complaints OR \"customer complaints\" OR \"bad review\" OR \"1 star\" OR lawsuit)",
+        "\"{{company}}\" (refund OR \"class action\" OR defect OR faulty OR broken)",
+        "site:reddit.com \"{{company}}\" (problem OR issue OR fail OR broken OR outage)",
+        "\"{{company}}\" (BBB OR \"Better Business Bureau\")"
+      ]
+    },
+    {
+      "name": "Leadership Instability & Governance (High Signal)",
+      "queries": [
+        "\"{{company}}\" (CEO resigns OR \"executive departure\" OR \"board conflict\")",
+        "\"{{company}}\" (internal turmoil OR culture problem OR scandal)",
+        "\"{{company}}\" (toxic culture OR harassment OR discrimination OR misconduct)",
+        "\"{{company}}\" (employee strike OR union dispute OR walkout)"
+      ]
+    },
+    {
+      "name": "Partner, Vendor & Ecosystem Risk (High Signal)",
+      "queries": [
+        "\"{{company}}\" (contract dispute OR lawsuit OR termination OR breach)",
+        "\"{{company}}\" (vendor dispute OR partner dispute OR failed partnership)",
+        "\"{{company}}\" (channel conflict OR reseller issue OR distribution problem)",
+        "\"{{company}}\" (dependency risk OR supplier failure)"
+      ]
+    },
+    {
+      "name": "Reputation, PR Crises & Public Backlash (High Signal)",
+      "queries": [
+        "\"{{company}}\" (scandal OR controversy OR backlash OR outrage)",
+        "\"{{company}}\" (boycott OR protest OR petition)",
+        "\"{{company}}\" (negative press OR critical article OR exposé)",
+        "\"{{company}}\" (discrimination OR harassment OR misconduct)"
+      ]
+    }
+  ]
+}

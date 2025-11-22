@@ -1,0 +1,82 @@
+{
+  "version": "1",
+  "description": "High-signal issue-focused web queries to detect operational failures, regulatory exposure, workforce instability, customer risks, and other negative signals related to {{company}}.",
+  "defaults": {
+    "recency_days": 720,
+    "max_results": 12
+  },
+  "categories": [
+    {
+      "name": "Legal, Regulatory & Enforcement",
+      "queries": [
+        "\"{{company}}\" (lawsuit OR litigation OR sued OR settlement OR class-action OR subpoena OR indictment)",
+        "\"{{company}}\" (investigation OR regulator OR enforcement OR violation)",
+        "\"{{company}}\" (FTC OR SEC OR DOJ OR CFPB OR FCA OR CNIL OR ICO OR FINRA) (action OR penalty OR ruling OR charge)",
+        "\"{{company}}\" (fraud OR misconduct OR bribery OR corruption OR whistleblower)"
+      ]
+    },
+    {
+      "name": "Cybersecurity, Breaches & Data Loss",
+      "queries": [
+        "\"{{company}}\" (breach OR \"data breach\" OR ransomware OR \"cyber attack\" OR \"security incident\")",
+        "\"{{company}}\" (malware OR exploit OR compromised OR exfiltration OR \"data leak\")",
+        "\"{{company}}\" (outage OR downtime OR \"systems down\" OR \"unplanned outage\")",
+        "\"{{company}}\" (GDPR OR \"data protection\" OR \"privacy violation\")"
+      ]
+    },
+    {
+      "name": "Financial Distress & Weakness Signals",
+      "queries": [
+        "\"{{company}}\" (layoffs OR \"job cuts\" OR restructuring OR downsizing)",
+        "\"{{company}}\" (bankruptcy OR insolvent OR insolvency OR foreclosure OR default)",
+        "\"{{company}}\" (missed earnings OR \"profit warning\" OR \"guidance cut\")",
+        "\"{{company}}\" (downgrade OR \"credit rating\" OR \"debt crisis\")"
+      ]
+    },
+    {
+      "name": "Operational Failures & Supply Chain Issues",
+      "queries": [
+        "\"{{company}}\" (shutdown OR fire OR explosion OR accident OR collapse)",
+        "\"{{company}}\" (recall OR defect OR \"product failure\" OR \"quality issue\")",
+        "\"{{company}}\" (operational delay OR bottleneck OR disruption OR shortage)",
+        "\"{{company}}\" (supplier dispute OR manufacturing issue OR supply chain problem)"
+      ]
+    },
+    {
+      "name": "Customer Complaints & Product Issues",
+      "queries": [
+        "\"{{company}}\" (complaints OR \"customer complaints\" OR \"bad review\" OR \"1 star\" OR lawsuit)",
+        "\"{{company}}\" (refund OR \"class action\" OR defect OR faulty OR broken)",
+        "site:reddit.com \"{{company}}\" (problem OR issue OR fail OR broken OR outage)",
+        "\"{{company}}\" (BBB OR \"Better Business Bureau\")"
+      ]
+    },
+    {
+      "name": "Leadership Instability & Governance Issues",
+      "queries": [
+        "\"{{company}}\" (CEO resigns OR \"executive departure\" OR \"board conflict\")",
+        "\"{{company}}\" (internal turmoil OR culture problem OR scandal)",
+        "\"{{company}}\" (toxic culture OR harassment OR discrimination OR misconduct)",
+        "\"{{company}}\" (employee strike OR union dispute OR walkout)"
+      ]
+    },
+    {
+      "name": "Partner, Vendor & Ecosystem Risk",
+      "queries": [
+        "\"{{company}}\" (contract dispute OR lawsuit OR termination OR breach)",
+        "\"{{company}}\" (vendor dispute OR partner dispute OR failed partnership)",
+        "\"{{company}}\" (channel conflict OR reseller issue OR distribution problem)",
+        "\"{{company}}\" (dependency risk OR supplier failure)"
+      ]
+    },
+    {
+      "name": "Reputation, PR Crises & Public Backlash",
+      "queries": [
+        "\"{{company}}\" (scandal OR controversy OR backlash OR outrage)",
+        "\"{{company}}\" (boycott OR protest OR petition)",
+        "\"{{company}}\" (negative press OR critical article OR exposé)",
+        "\"{{company}}\" (discrimination OR harassment OR misconduct)"
+      ]
+    }
+  ]
+}

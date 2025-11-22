@@ -8,6 +8,10 @@ VERTEX_PROJECT ?= portend-sam
 VERTEX_LOCATION ?= us-central1
 GOOGLE_APPLICATION_CREDENTIALS ?=
 
+GOOGLE_CLOUD_PROJECT ?= samaia-api
+GOOGLE_CLOUD_LOCATION ?= global
+GOOGLE_GENAI_USE_VERTEXAI ?= True
+
 # Default Cloud Function names
 GCF_NAME ?= samaia-api
 GCF_NAME_SUPABASE ?= samaia-api-supabase
@@ -155,7 +159,7 @@ gcf-deploy:
 	  --trigger-http \
 	  --allow-unauthenticated \
 	  --timeout 540s \
-	  --memory 2Gi \
+	  --memory 4Gi \
 	  --set-env-vars "CORS_ALLOW_ORIGINS=$(ALLOWED_ORIGINS),RUN_TOKEN=$(RUN_TOKEN)"
 
 gcf-deploy-vertex:
@@ -221,20 +225,22 @@ gcf-deploy-supabase-webhook: check-project
 	  --gen2 \
 	  --runtime python312 \
 	  --region $(REGION) \
+	  --concurrency=1 \
 	  --entry-point http_handler \
 	  --source . \
 	  --trigger-http \
 	  --allow-unauthenticated \
-	  --timeout 540s \
+	  --timeout 1080s \
 	  --memory 2Gi \
-	  --set-env-vars "CORS_ALLOW_ORIGINS=$$CORS_ALLOW_ORIGINS,SUPABASE_URL=$$SUPABASE_URL,SUPABASE_SERVICE_KEY=$$SUPABASE_SERVICE_KEY,SUPABASE_KEY=$$SUPABASE_SERVICE_KEY,SUPABASE_SCHEMA=$$SUPABASE_SCHEMA,WEBHOOK_SECRET=$$WEBHOOK_SECRET,RUN_TOKEN=$$RUN_TOKEN,CALLBACK_URL=$$CALLBACK_URL"; \
+	  --cpu=2 \
+	  --set-env-vars "CORS_ALLOW_ORIGINS=$$CORS_ALLOW_ORIGINS,SUPABASE_URL=$$SUPABASE_URL,SUPABASE_SERVICE_KEY=$$SUPABASE_SERVICE_KEY,SUPABASE_KEY=$$SUPABASE_SERVICE_KEY,SUPABASE_SCHEMA=$$SUPABASE_SCHEMA,WEBHOOK_SECRET=$$WEBHOOK_SECRET,RUN_TOKEN=$$RUN_TOKEN,CALLBACK_URL=$$CALLBACK_URL,RESULTS_PER_QUERY=$$RESULTS_PER_QUERY,VERTEX_PROJECT=$$VERTEX_PROJECT,VERTEX_LOCATION=$$VERTEX_LOCATION,GOOGLE_CLOUD_PROJECT=$$GOOGLE_CLOUD_PROJECT,GOOGLE_CLOUD_LOCATION=$$GOOGLE_CLOUD_LOCATION,GOOGLE_GENAI_USE_VERTEXAI=$$GOOGLE_GENAI_USE_VERTEXAI"; \
 	echo "✅ Deployed $(GCF_NAME_SUPABASE) using .env (webhook, no Secret Manager)"
 
 gcf-local-supabase:
 	@if [ -f "$(ENV_FILE)" ]; then set -a; . "$(ENV_FILE)"; set +a; fi; \
 	export PORT=$(PORT); \
 	export WEB_QUERY_PACK=configs/web_queries.generic.json; \
-	export WEB_MAX_RESULTS=25; \
+	export WEB_MAX_RESULTS=500; \
 	export EVIDENCE_STRICTNESS=loose; \
 	SUPABASE_KEY="$$SUPABASE_SERVICE_KEY" \
 	functions-framework --source gcf_http_supabase.py --target=http_handler --port=$(PORT)
