@@ -1,0 +1,139 @@
+version: 1
+
+# Global list of docs that are treated as "trusted" grounding sources
+trusted_grounding:
+  - /docs
+  - /examples
+  - /reference
+  - /concepts
+
+flows:
+  # Step 1 – Web evidence collection
+  web_evidence:
+    description: Collect web evidence and raw account signals for a single target account.
+    tool: step1_evidence_grabber
+    entrypoint: src/app/step1_evidence_grabber.py
+    inputs:
+      - company
+      - company_url
+      - domain
+      - campaign_config.ta_step1_temperature
+      - campaign_config.ta_step1_max_output_tokens
+      - campaign_config.ta_step1_external_provisioned_qpm
+      - campaign_config.ta_step1_external_safety_margin
+      - campaign_config.ta_step1_external_concurrency
+    outputs:
+      - step1_web_evidence.json
+      - target_accounts.step1_web_evidence (Supabase column)
+    env:
+      - WEB_QUERY_PACK
+      - WEB_MAX_RESULTS
+      - TA_STEP1_TEMPERATURE
+      - TA_STEP1_MAX_OUTPUT_TOKENS
+      - TA_STEP1_EXTERNAL_PROVISIONED_QPM
+      - TA_STEP1_EXTERNAL_SAFETY_MARGIN
+      - TA_STEP1_EXTERNAL_CONCURRENCY
+    adk_docs:
+      - /get-started/quickstart
+      - /api-reference/tools
+      - /api-reference/tools/web-search
+
+  # Step 2 – Evidence harvester / problem index
+  evidence_harvester:
+    description: Cluster and normalize raw web events into an evidence index of problems and themes.
+    tool: step2_evidence_harvester
+    entrypoint: src/app/step2_evidence_harvester.py
+    inputs:
+      - step1_web_evidence.json
+      - company
+    outputs:
+      - step2_problems.json
+      - target_accounts.step2_problems
+    adk_docs:
+      - /get-started/quickstart
+      - /api-reference/tools
+      - /api-reference/models
+
+  # Step 3 – Hypothesis generation
+  hypotheses:
+    description: Generate problem and opportunity hypotheses from web evidence and campaign context.
+    tool: step3_hypotheses
+    entrypoint: src/app/step3_hypotheses_generator.py
+    inputs:
+      - step2_problems.json
+      - company
+      - time_window
+      - campaign_config.ta_step3_temperature
+      - campaign_config.ta_step3_max_output_tokens
+    outputs:
+      - step3_hypotheses.json
+      - target_accounts.step3_hypotheses
+    env:
+      - TA_STEP3_TEMPERATURE
+      - TA_STEP3_MAX_OUTPUT_TOKENS
+    adk_docs:
+      - /get-started/quickstart
+      - /api-reference/tools
+      - /api-reference/models
+
+  # Step 4 – Alignment to campaign challenges
+  alignments:
+    description: Align account-specific issues to the campaign challenge taxonomy.
+    tool: step4_alignment
+    entrypoint: src/app/step4_alignment.py
+    inputs:
+      - step3_hypotheses.json
+      - campaign_challenges.json
+      - company
+      - time_window
+    outputs:
+      - step4_alignments.json
+      - target_accounts.step4_alignments
+    adk_docs:
+      - /get-started/quickstart
+      - /api-reference/tools
+      - /concepts/alignments
+
+  # Step 5 – Compelling events
+  compelling_events:
+    description: Turn aligned issues into outbound-ready compelling events for this account.
+    tool: step5_compelling_events
+    entrypoint: src/app/step5_compelling_events.py
+    inputs:
+      - step1_web_evidence.json
+      - step2_problems.json
+      - step4_alignments.json
+      - company
+      - campaign_config.evidence_strictness
+      - campaign_config.ta_step5_temperature
+      - campaign_config.ta_step5_max_output_tokens
+    outputs:
+      - step5_compelling_events.json
+      - target_accounts.step5_compelling_events
+    env:
+      - STEP5_STRICT
+      - TA_STEP5_TEMPERATURE
+      - TA_STEP5_MAX_OUTPUT_TOKENS
+    adk_docs:
+      - /get-started/quickstart
+      - /api-reference/tools
+      - /concepts/compelling-events
+
+orchestrator:
+  description: Session-aware pipeline runner that orchestrates steps 1–5 and writes outputs to Supabase.
+  entrypoint: src/app/run.py
+  uses_flows:
+    - web_evidence
+    - evidence_harvester
+    - hypotheses
+    - alignments
+    - compelling_events
+  datasets:
+    - campaigns
+    - target_accounts
+    - needs_analysis_output
+  adk_docs:
+    - /get-started/quickstart
+    - /concepts/sessions
+    - /api-reference/events
+    - /api-reference/tools
